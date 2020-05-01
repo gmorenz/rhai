@@ -69,7 +69,7 @@ fn check_num_args(
 ) -> Result<(), Box<EvalAltResult>> {
     if args.len() != num_args {
         Err(Box::new(EvalAltResult::ErrorFunctionArgsMismatch(
-            name.to_string(),
+            name.clone(),
             num_args,
             args.len(),
             pos,

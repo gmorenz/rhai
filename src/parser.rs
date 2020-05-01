@@ -1738,8 +1738,9 @@ fn parse_block<'a>(
                 return Err(PERR::BadInput(err.to_string()).into_err(*pos))
             }
             // { ... stmt ???
-            (_, pos) => {
+            (token, pos) => {
                 // Semicolons are not optional between statements
+                panic!("parser.rs:1743 Missing toekn, instead {:?}", token);
                 return Err(
                     PERR::MissingToken(";".into(), "to terminate this statement".into())
                         .into_err(*pos),
@@ -1984,10 +1985,9 @@ fn parse_global_level<'a>(
                 return Err(PERR::BadInput(err.to_string()).into_err(*pos))
             }
             // stmt ???
-            (_, pos) => {
-                // Semicolons are not optional between statements
+            (token, pos) => {
                 return Err(
-                    PERR::MissingToken(";".into(), "to terminate this statement".into())
+                    PERR::MissingToken(";".into(), format!("1990 to terminate this statement {:?}", token))
                         .into_err(*pos),
                 );
             }

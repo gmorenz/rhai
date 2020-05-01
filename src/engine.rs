@@ -3,7 +3,7 @@
 use crate::any::{Dynamic, Union};
 use crate::calc_fn_hash;
 use crate::error::ParseErrorType;
-use crate::intern::Str;
+use crate::intern::{Str, StaticStr};
 use crate::optimize::OptimizationLevel;
 use crate::packages::{CorePackage, Package, PackageLibrary, StandardPackage};
 use crate::parser::{Expr, FnDef, ReturnType, Stmt};
@@ -68,10 +68,10 @@ const FUNCTIONS_COUNT: usize = 512;
 #[cfg(any(feature = "only_i32", feature = "only_i64"))]
 const FUNCTIONS_COUNT: usize = 256;
 
-pub const KEYWORD_PRINT: Str = crate::intern::KEYWORD_PRINT;
-pub const KEYWORD_DEBUG: Str = crate::intern::KEYWORD_DEBUG;
-pub const KEYWORD_TYPE_OF: Str = crate::intern::KEYWORD_TYPE_OF;
-pub const KEYWORD_EVAL: Str = crate::intern::KEYWORD_EVAL;
+pub const KEYWORD_PRINT: StaticStr = crate::intern::KEYWORD_PRINT;
+pub const KEYWORD_DEBUG: StaticStr = crate::intern::KEYWORD_DEBUG;
+pub const KEYWORD_TYPE_OF: StaticStr = crate::intern::KEYWORD_TYPE_OF;
+pub const KEYWORD_EVAL: StaticStr = crate::intern::KEYWORD_EVAL;
 pub const FUNC_TO_STRING: &str = "to_string";
 pub const FUNC_GETTER: &str = "get$";
 pub const FUNC_SETTER: &str = "set$";
@@ -561,15 +561,15 @@ impl Engine {
             let result = func(args, pos)?;
 
             // See if the function match print/debug (which requires special processing)
-            return Ok(match fn_name {
-                &KEYWORD_PRINT => (self.print)(result.as_str().map_err(|type_name| {
+            return Ok(match fn_name.static_str() {
+                KEYWORD_PRINT => (self.print)(result.as_str().map_err(|type_name| {
                     Box::new(EvalAltResult::ErrorMismatchOutputType(
                         type_name.into(),
                         pos,
                     ))
                 })?)
                 .into(),
-                &KEYWORD_DEBUG => (self.debug)(result.as_str().map_err(|type_name| {
+                KEYWORD_DEBUG => (self.debug)(result.as_str().map_err(|type_name| {
                     Box::new(EvalAltResult::ErrorMismatchOutputType(
                         type_name.into(),
                         pos,
@@ -700,14 +700,14 @@ impl Engine {
         pos: Position,
         level: usize,
     ) -> Result<Dynamic, Box<EvalAltResult>> {
-        match fn_name {
+        match fn_name.static_str() {
             // type_of
-            &KEYWORD_TYPE_OF if args.len() == 1 && !self.has_override(fn_lib, &KEYWORD_TYPE_OF) => {
+            KEYWORD_TYPE_OF if args.len() == 1 && !self.has_override(fn_lib, &KEYWORD_TYPE_OF.into()) => {
                 Ok(self.map_type_name(args[0].type_name()).to_string().into())
             }
 
             // eval - reaching this point it must be a method-style call
-            &KEYWORD_EVAL if args.len() == 1 && !self.has_override(fn_lib, &KEYWORD_EVAL) => {
+            KEYWORD_EVAL if args.len() == 1 && !self.has_override(fn_lib, &KEYWORD_EVAL.into()) => {
                 Err(Box::new(EvalAltResult::ErrorRuntime(
                     "'eval' should not be called in method style. Try eval(...);".into(),
                     pos,
@@ -1247,7 +1247,7 @@ impl Engine {
                 // eval - only in function call style
                 if fn_name == &KEYWORD_EVAL
                     && args.len() == 1
-                    && !self.has_override(fn_lib, &KEYWORD_EVAL)
+                    && !self.has_override(fn_lib, &KEYWORD_EVAL.into())
                 {
                     let prev_len = scope.len();
 

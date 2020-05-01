@@ -744,7 +744,7 @@ impl<'a> TokenIterator<'a> {
                     let identifier: Str = identifier_string.into();
 
                     return Some((
-                        match identifier {
+                        match identifier.static_str() {
                             KEYWORD_TRUE => Token::True,
                             KEYWORD_FALSE => Token::False,
                             KEYWORD_LET => Token::Let,

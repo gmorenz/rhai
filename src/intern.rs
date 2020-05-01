@@ -23,35 +23,52 @@ the size of the entry struct by a pointer (1/3rd it's size).
 
 // Keywords, keep in sync with Interner::new
 // Safety: We never put a 0 inside new_unchecked...
-pub const KEYWORD_PRINT: Str = Str(unsafe{ NonZeroU32::new_unchecked(1) }); // "print";
-pub const KEYWORD_DEBUG: Str = Str(unsafe{ NonZeroU32::new_unchecked(2) }); // "debug";
-pub const KEYWORD_TYPE_OF: Str = Str(unsafe{ NonZeroU32::new_unchecked(3) }); // "type_of";
-pub const KEYWORD_EVAL: Str = Str(unsafe{ NonZeroU32::new_unchecked(4) }); // "eval";
-pub const KEYWORD_TRUE: Str = Str(unsafe{ NonZeroU32::new_unchecked(5) }); // "true"
-pub const KEYWORD_FALSE: Str = Str(unsafe{ NonZeroU32::new_unchecked(6) }); // "false"
-pub const KEYWORD_LET: Str = Str(unsafe{ NonZeroU32::new_unchecked(7) }); // "let"
-pub const KEYWORD_CONST: Str = Str(unsafe{ NonZeroU32::new_unchecked(8) }); // "const"
-pub const KEYWORD_IF: Str = Str(unsafe{ NonZeroU32::new_unchecked(9) }); // "if"
-pub const KEYWORD_ELSE: Str = Str(unsafe{ NonZeroU32::new_unchecked(10) }); // "else"
-pub const KEYWORD_WHILE: Str = Str(unsafe{ NonZeroU32::new_unchecked(11) }); // "while"
-pub const KEYWORD_LOOP: Str = Str(unsafe{ NonZeroU32::new_unchecked(12) }); // "loop"
-pub const KEYWORD_CONTINUE: Str = Str(unsafe{ NonZeroU32::new_unchecked(13) }); // "continue"
-pub const KEYWORD_BREAK: Str = Str(unsafe{ NonZeroU32::new_unchecked(14) }); // "break"
-pub const KEYWORD_RETURN: Str = Str(unsafe{ NonZeroU32::new_unchecked(15) }); // "return"
-pub const KEYWORD_THROW: Str = Str(unsafe{ NonZeroU32::new_unchecked(16) }); // "throw"
-pub const KEYWORD_FOR: Str = Str(unsafe{ NonZeroU32::new_unchecked(17) }); // "for"
-pub const KEYWORD_IN: Str = Str(unsafe{ NonZeroU32::new_unchecked(18) }); // "in"
-pub const KEYWORD_FN: Str = Str(unsafe{ NonZeroU32::new_unchecked(19) }); // "fn"
+pub const KEYWORD_PRINT: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(1) }); // "print";
+pub const KEYWORD_DEBUG: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(2) }); // "debug";
+pub const KEYWORD_TYPE_OF: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(3) }); // "type_of";
+pub const KEYWORD_EVAL: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(4) }); // "eval";
+pub const KEYWORD_TRUE: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(5) }); // "true"
+pub const KEYWORD_FALSE: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(6) }); // "false"
+pub const KEYWORD_LET: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(7) }); // "let"
+pub const KEYWORD_CONST: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(8) }); // "const"
+pub const KEYWORD_IF: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(9) }); // "if"
+pub const KEYWORD_ELSE: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(10) }); // "else"
+pub const KEYWORD_WHILE: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(11) }); // "while"
+pub const KEYWORD_LOOP: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(12) }); // "loop"
+pub const KEYWORD_CONTINUE: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(13) }); // "continue"
+pub const KEYWORD_BREAK: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(14) }); // "break"
+pub const KEYWORD_RETURN: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(15) }); // "return"
+pub const KEYWORD_THROW: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(16) }); // "throw"
+pub const KEYWORD_FOR: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(17) }); // "for"
+pub const KEYWORD_IN: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(18) }); // "in"
+pub const KEYWORD_FN: StaticStr = StaticStr(unsafe{ NonZeroU32::new_unchecked(19) }); // "fn"
 
 #[derive(PartialEq, Eq, Hash)]
 pub struct Str(NonZeroU32);
+
+/// Like Str but without a `Drop`. This is a workaround to allow fast pattern matching.
+/// StaticStr's should not be retained.
+#[derive(PartialEq, Eq)]
+pub struct StaticStr(NonZeroU32);
+
+impl PartialEq<Str> for StaticStr {
+    fn eq(&self, other: &Str) -> bool { self.0 == other.0 }
+}
+
+impl PartialEq<StaticStr> for Str {
+fn eq(&self, other: &StaticStr) -> bool { self.0 == other.0 }
+    
+}
 
 pub fn intern_string(string: String) -> Str {
     let mut interner = INTERNER.write().unwrap();
     if let Some(&idx) = interner.dedup_map.get(&string) {
         match &mut interner.strings[idx.get() as usize] {
-            Entry::Occupied{ref mut refs, ..} => 
-                *refs = NonZeroU32::new(refs.get() + 1).unwrap(),
+            Entry::Occupied{ref mut refs, ..} => { 
+                println!("{} Reintern {} at {}", idx, string, refs.get());
+                *refs = NonZeroU32::new(refs.get() + 1).unwrap();
+                println!("{} Reintern {} to {}", idx, string, refs.get());
+            }
             Entry::Vacant(..) => unreachable!()
         };
         return Str(idx);
@@ -59,10 +76,12 @@ pub fn intern_string(string: String) -> Str {
 
     let entry = Entry::Occupied{
         refs: NonZeroU32::new(1).unwrap(),
-        data: string,
+        data: string.clone() ,
     };
 
     if let Some(vacancy) = interner.vacant_head {
+        println!("{} New Vacant {}", vacancy, string);
+        interner.dedup_map.insert(string, vacancy);
         let entry = replace(&mut interner.strings[vacancy.get() as usize], entry);
         match entry {
             Entry::Vacant(next_vacancy) => interner.vacant_head = next_vacancy,
@@ -72,12 +91,18 @@ pub fn intern_string(string: String) -> Str {
     }
     else {
         let next = NonZeroU32::new(interner.strings.len() as u32).unwrap();
+        println!("{} New Tail {}", next, string);
+        interner.dedup_map.insert(string, next);
         interner.strings.push(entry);
         Str(next)
     }
 }
 
 impl Str {
+    pub fn static_str(&self) -> StaticStr {
+        StaticStr(self.0)
+    }
+
     pub fn get_string(&self) -> String {
         self.get_str().to_owned()
     }
@@ -110,8 +135,9 @@ impl Clone for Str {
     fn clone(&self) -> Str {
         let mut interner = INTERNER.write().unwrap();
         match &mut interner.strings[self.0.get() as usize] {
-            &mut Entry::Occupied{ ref mut refs, .. } => {
+            &mut Entry::Occupied{ ref mut refs, ref data } => {
                 *refs = NonZeroU32::new(refs.get() + 1).unwrap();
+                println!("{} Clone {} to {}", self.0, data, refs.get());
             }
             _ => unreachable!()
         }
@@ -129,6 +155,15 @@ impl Into<String> for Str {
 
 impl From<String> for Str {
     fn from(string: String) -> Self { intern_string(string) }
+}
+
+impl From<StaticStr> for Str {
+    fn from(str: StaticStr) -> Self {
+        let s = Str(str.0);
+        let r = s.clone();
+        std::mem::forget(s);
+        r
+    }
 }
 
 impl <'a> From<&'a str> for Str {
@@ -162,19 +197,30 @@ impl Drop for Str {
         let mut interner = INTERNER.write().unwrap();
         let idx = self.0.get() as usize;
         match &mut interner.strings[idx] {
-            &mut Entry::Occupied{ ref mut refs, .. } => {
+            &mut Entry::Occupied{ ref mut refs, ref data } => {
                 let v = refs.get();
                 if v > 1 {
                     *refs = NonZeroU32::new(v - 1).unwrap();
+                    println!("{} Decr {} to {}", self.0, data, refs.get());
                     return;
                 }
+                else {
+                    println!("{} Free {}", self.0, data);
+                }
             }
-            _ => unreachable!()
+            _ => unreachable!("{} Free Vacant", self.0),
         }
 
+        assert!(idx > 19, "Trying to free keyword: {}", idx);
         let new_entry = Entry::Vacant(interner.vacant_head);
         // We only reach here if refs should now be 0
-        let _ = replace(&mut interner.strings[idx], new_entry);
+        let old_entry = replace(&mut interner.strings[idx], new_entry);
+        
+        match old_entry {
+            Entry::Occupied{ data, .. } => interner.dedup_map.remove(&data),
+            _ => unreachable!(),
+        };
+        
         interner.vacant_head = Some(self.0);
     }
 }

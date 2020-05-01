@@ -39,7 +39,7 @@ pub trait RegisterFn<FN, ARGS, RET> {
     /// # Ok(())
     /// # }
     /// ```
-    fn register_fn(&mut self, name: &Str, f: FN);
+    fn register_fn(&mut self, name: impl Into<Str>, f: FN);
 }
 
 /// A trait to register custom functions that return `Dynamic` values with the `Engine`.
@@ -66,7 +66,7 @@ pub trait RegisterDynamicFn<FN, ARGS> {
     /// # Ok(())
     /// # }
     /// ```
-    fn register_dynamic_fn(&mut self, name: &Str, f: FN);
+    fn register_dynamic_fn(&mut self, name: impl Into<Str>, f: FN);
 }
 
 /// A trait to register fallible custom functions returning `Result<_, Box<EvalAltResult>>` with the `Engine`.
@@ -96,7 +96,7 @@ pub trait RegisterResultFn<FN, ARGS, RET> {
     /// engine.eval::<i64>("div(42, 0)")
     ///         .expect_err("expecting division by zero error!");
     /// ```
-    fn register_result_fn(&mut self, name: &Str, f: FN);
+    fn register_result_fn(&mut self, name: impl Into<Str>, f: FN);
 }
 
 // These types are used to build a unique _marker_ tuple type for each combination
@@ -136,19 +136,19 @@ macro_rules! count_args {
 
 /// This macro creates a closure wrapping a registered function.
 macro_rules! make_func {
-	($fn_name:ident : $fn:ident : $map:expr ; $($par:ident => $clone:expr),*) => {
+	($fn_name:ident : $fn:ident : $map:expr ; $($par:ident => $clone:expr),*) => {{
 //   ^ function name
 //                    ^ function pointer
 //                                ^ result mapping function
 //                                              ^ function parameter generic type name (A, B, C etc.)
 //                                                            ^ dereferencing function
-
+        let fn_name = $fn_name.clone();
 		move |args: &mut FnCallArgs, pos: Position| {
 			// Check for length at the beginning to avoid per-element bound checks.
 			const NUM_ARGS: usize = count_args!($($par)*);
 
 			if args.len() != NUM_ARGS {
-				return Err(Box::new(EvalAltResult::ErrorFunctionArgsMismatch($fn_name.clone(), NUM_ARGS, args.len(), pos)));
+				return Err(Box::new(EvalAltResult::ErrorFunctionArgsMismatch(fn_name.clone(), NUM_ARGS, args.len(), pos)));
 			}
 
 			#[allow(unused_variables, unused_mut)]
@@ -162,8 +162,8 @@ macro_rules! make_func {
 			// potentially clone the value, otherwise pass the reference.
 			let r = $fn($(($clone)($par)),*);
 			$map(r, pos)
-		};
-	};
+		}
+	}};
 }
 
 /// To Dynamic mapping function.
@@ -212,10 +212,10 @@ macro_rules! def_register {
             RET: Variant + Clone
         > RegisterFn<FN, ($($mark,)*), RET> for Engine
         {
-            fn register_fn(&mut self, name: &Str, f: FN) {
-                let fn_name = name.to_string();
-                let func = make_func!(fn_name : f : map_dynamic ; $($par => $clone),*);
-                let hash = calc_fn_spec(name, [$(TypeId::of::<$par>()),*].iter().cloned());
+            fn register_fn(&mut self, name: impl Into<Str>, f: FN) {
+                let name = name.into();
+                let func = make_func!(name : f : map_dynamic ; $($par => $clone),*);
+                let hash = calc_fn_spec(&name, [$(TypeId::of::<$par>()),*].iter().cloned());
                 self.functions.insert(hash, Box::new(func));
             }
         }
@@ -230,10 +230,10 @@ macro_rules! def_register {
             FN: Fn($($param),*) -> Dynamic + 'static,
         > RegisterDynamicFn<FN, ($($mark,)*)> for Engine
         {
-            fn register_dynamic_fn(&mut self, name: &Str, f: FN) {
-                let fn_name = name.to_string();
-                let func = make_func!(fn_name : f : map_identity ; $($par => $clone),*);
-                let hash = calc_fn_spec(name, [$(TypeId::of::<$par>()),*].iter().cloned());
+            fn register_dynamic_fn(&mut self, name: impl Into<Str>, f: FN) {
+                let name = name.into();
+                let func = make_func!(name : f : map_identity ; $($par => $clone),*);
+                let hash = calc_fn_spec(&name, [$(TypeId::of::<$par>()),*].iter().cloned());
                 self.functions.insert(hash, Box::new(func));
             }
         }
@@ -249,10 +249,10 @@ macro_rules! def_register {
             RET: Variant + Clone
         > RegisterResultFn<FN, ($($mark,)*), RET> for Engine
         {
-            fn register_result_fn(&mut self, name: &Str, f: FN) {
-                let fn_name = name.to_string();
-                let func = make_func!(fn_name : f : map_result ; $($par => $clone),*);
-                let hash = calc_fn_spec(name, [$(TypeId::of::<$par>()),*].iter().cloned());
+            fn register_result_fn(&mut self, name: impl Into<Str>, f: FN) {
+                let name = name.into();
+                let func = make_func!(name : f : map_result ; $($par => $clone),*);
+                let hash = calc_fn_spec(&name, [$(TypeId::of::<$par>()),*].iter().cloned());
                 self.functions.insert(hash, Box::new(func));
             }
         }

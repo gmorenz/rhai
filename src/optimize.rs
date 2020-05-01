@@ -4,7 +4,7 @@ use crate::engine::{
     Engine, FnAny, FnCallArgs, FunctionsLib, KEYWORD_DEBUG, KEYWORD_EVAL, KEYWORD_PRINT,
     KEYWORD_TYPE_OF,
 };
-use crate::intern::Str;
+use crate::intern::{Str, StaticStr};
 use crate::packages::PackageLibrary;
 use crate::parser::{map_dynamic_to_expr, Expr, FnDef, ReturnType, Stmt, AST};
 use crate::result::EvalAltResult;
@@ -346,7 +346,7 @@ fn optimize_stmt<'a>(stmt: Stmt, state: &mut State<'a>, preserve_result: bool) -
 /// Optimize an expression.
 fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
     // These keywords are handled specially
-    const DONT_EVAL_KEYWORDS: [&Str; 3] = [&KEYWORD_PRINT, &KEYWORD_DEBUG, &KEYWORD_EVAL];
+    const DONT_EVAL_KEYWORDS: [StaticStr; 3] = [KEYWORD_PRINT, KEYWORD_DEBUG, KEYWORD_EVAL];
 
     match expr {
         // ( stmt )
@@ -494,7 +494,7 @@ fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
             // 'x' in #{...}
             (Expr::CharConstant(lhs, pos), Expr::Map(items, _)) => {
                 state.set_dirty();
-                let lhs = lhs.into();
+                let lhs: Str = lhs.into();
 
                 if items.iter().find(|(name, _, _)| name == &lhs).is_some() {
                     Expr::True(pos)
@@ -559,7 +559,7 @@ fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
         },
 
         // Do not call some special keywords
-        Expr::FnCall(id, args, def_value, pos) if DONT_EVAL_KEYWORDS.contains(&&id)=>
+        Expr::FnCall(id, args, def_value, pos) if DONT_EVAL_KEYWORDS.contains(&id.static_str())=>
             Expr::FnCall(id, Box::new(args.into_iter().map(|a| optimize_expr(a, state)).collect()), def_value, pos),
 
         // Eagerly call functions

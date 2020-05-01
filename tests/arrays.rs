@@ -5,14 +5,23 @@ use rhai::{Array, Engine, EvalAltResult, RegisterFn, INT};
 fn test_arrays() -> Result<(), Box<EvalAltResult>> {
     let engine = Engine::new();
 
+    println!("Test {}", line!());
     assert_eq!(engine.eval::<INT>("let x = [1, 2, 3]; x[1]")?, 2);
+
+    println!("Test {}", line!());
     assert_eq!(engine.eval::<INT>("let y = [1, 2, 3]; y[1] = 5; y[1]")?, 5);
+
+    println!("Test {}", line!());
     assert_eq!(
         engine.eval::<char>(r#"let y = [1, [ 42, 88, "93" ], 3]; y[1][2][1]"#)?,
         '3'
     );
+
+    println!("Test {}", line!());
     assert!(engine.eval::<bool>("let y = [1, 2, 3]; 2 in y")?);
 
+
+    println!("Test {}", line!());
     #[cfg(not(feature = "no_object"))]
     assert_eq!(
         engine.eval::<INT>(
@@ -31,6 +40,9 @@ fn test_arrays() -> Result<(), Box<EvalAltResult>> {
         )?,
         14
     );
+
+
+    println!("Test {}", line!());
     assert_eq!(
         engine.eval::<INT>(
             r"
@@ -41,6 +53,9 @@ fn test_arrays() -> Result<(), Box<EvalAltResult>> {
         )?,
         5
     );
+
+
+    println!("Test {}", line!());
     assert_eq!(
         engine
             .eval::<Array>(

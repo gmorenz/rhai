@@ -37,7 +37,7 @@ pub enum EvalAltResult {
     /// Function call has incorrect number of arguments.
     /// Wrapped values are the name of the function, the number of parameters required
     /// and the actual number of arguments passed.
-    ErrorFunctionArgsMismatch(String, usize, usize, Position),
+    ErrorFunctionArgsMismatch(Str, usize, usize, Position),
     /// Non-boolean operand encountered for boolean operator. Wrapped value is the operator.
     ErrorBooleanArgMismatch(String, Position),
     /// Non-character value encountered where a character is required.

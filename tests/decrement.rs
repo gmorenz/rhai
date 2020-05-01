@@ -8,7 +8,7 @@ fn test_decrement() -> Result<(), Box<EvalAltResult>> {
 
     assert!(matches!(
         *engine.eval::<String>(r#"let s = "test"; s -= "ing"; s"#).expect_err("expects error"),
-        EvalAltResult::ErrorFunctionNotFound(err, _) if err == "- (string, string)"
+        EvalAltResult::ErrorFunctionNotFound(err, _) if err.get_str() == "- (string, string)"
     ));
 
     Ok(())

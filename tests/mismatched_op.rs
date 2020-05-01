@@ -35,12 +35,12 @@ fn test_mismatched_op_custom_type() {
     #[cfg(feature = "only_i32")]
     assert!(matches!(
         *r,
-        EvalAltResult::ErrorFunctionNotFound(err, _) if err == "+ (i32, TestStruct)"
+        EvalAltResult::ErrorFunctionNotFound(err, _) if err.get_str() == "+ (i32, TestStruct)"
     ));
 
     #[cfg(not(feature = "only_i32"))]
     assert!(matches!(
         *r,
-        EvalAltResult::ErrorFunctionNotFound(err, _) if err == "+ (i64, TestStruct)"
+        EvalAltResult::ErrorFunctionNotFound(err, _) if err.get_str() == "+ (i64, TestStruct)"
     ));
 }

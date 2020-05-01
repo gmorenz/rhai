@@ -146,7 +146,7 @@ impl Scope {
     /// my_scope.push("x", 42_i64);
     /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
     /// ```
-    pub fn push<T: Variant + Clone>(&mut self, name: Str, value: T) {
+    pub fn push<K: Into<Str>, T: Variant + Clone>(&mut self, name: K, value: T) {
         self.push_dynamic_value(name, EntryType::Normal, Dynamic::from(value), false);
     }
 

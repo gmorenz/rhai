@@ -41,18 +41,18 @@ fn test_call_fn() -> Result<(), Box<EvalAltResult>> {
         ",
     )?;
 
-    let r: i64 = engine.call_fn(&mut scope, &ast, "hello", (42 as INT, 123 as INT))?;
+    let r: i64 = engine.call_fn(&mut scope, &ast, &"hello".into(), (42 as INT, 123 as INT))?;
     assert_eq!(r, 165);
 
-    let r: i64 = engine.call_fn(&mut scope, &ast, "hello", (123 as INT,))?;
+    let r: i64 = engine.call_fn(&mut scope, &ast, &"hello".into(), (123 as INT,))?;
     assert_eq!(r, 5166);
 
-    let r: i64 = engine.call_fn(&mut scope, &ast, "hello", ())?;
+    let r: i64 = engine.call_fn(&mut scope, &ast, &"hello".into(), ())?;
     assert_eq!(r, 42);
 
     assert_eq!(
         scope
-            .get_value::<INT>("foo")
+            .get_value::<INT>(&"foo".into())
             .expect("variable foo should exist"),
         1
     );

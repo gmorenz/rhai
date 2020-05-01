@@ -201,7 +201,7 @@ impl Engine {
         U: Variant + Clone,
         F: ObjectGetCallback<T, U>,
     {
-        self.register_fn(&make_getter(name), callback);
+        self.register_fn(make_getter(name), callback);
     }
 
     /// Register a setter function for a member of a registered type with the `Engine`.
@@ -247,7 +247,7 @@ impl Engine {
         U: Variant + Clone,
         F: ObjectSetCallback<T, U>,
     {
-        self.register_fn(&make_setter(name), callback);
+        self.register_fn(make_setter(name), callback);
     }
 
     /// Shorthand for registering both getter and setter functions
