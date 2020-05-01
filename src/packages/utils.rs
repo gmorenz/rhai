@@ -3,13 +3,14 @@ use super::PackageStore;
 use crate::any::{Dynamic, Variant};
 use crate::calc_fn_hash;
 use crate::engine::FnCallArgs;
+use crate::intern::Str;
 use crate::result::EvalAltResult;
 use crate::token::Position;
 
 use crate::stdlib::{
     any::TypeId,
     boxed::Box,
-    string::{String, ToString},
+    string::ToString,
 };
 
 /// This macro makes it easy to define a _package_ and register functions into it.
@@ -61,7 +62,7 @@ macro_rules! def_package {
 
 /// Check whether the correct number of arguments is passed to the function.
 fn check_num_args(
-    name: &str,
+    name: &Str,
     num_args: usize,
     args: &mut FnCallArgs,
     pos: Position,
@@ -102,7 +103,7 @@ fn check_num_args(
 /// The above defines a package named 'MyPackage' with a single function named 'my_add_1'.
 pub fn reg_none<R>(
     lib: &mut PackageStore,
-    fn_name: &'static str,
+    fn_name: impl Into<Str>,
 
     #[cfg(not(feature = "sync"))] func: impl Fn() -> R + 'static,
     #[cfg(feature = "sync")] func: impl Fn() -> R + Send + Sync + 'static,
@@ -114,10 +115,11 @@ pub fn reg_none<R>(
         + Sync
         + 'static,
 ) {
-    let hash = calc_fn_hash(fn_name, ([] as [TypeId; 0]).iter().cloned());
+    let fn_name = fn_name.into();
+    let hash = calc_fn_hash(&fn_name, ([] as [TypeId; 0]).iter().cloned());
 
     let f = Box::new(move |args: &mut FnCallArgs, pos: Position| {
-        check_num_args(fn_name, 0, args, pos)?;
+        check_num_args(&fn_name, 0, args, pos)?;
 
         let r = func();
         map_result(r, pos)
@@ -150,7 +152,7 @@ pub fn reg_none<R>(
 /// The above defines a package named 'MyPackage' with a single function named 'my_add_1'.
 pub fn reg_unary<T: Variant + Clone, R>(
     lib: &mut PackageStore,
-    fn_name: &'static str,
+    fn_name: impl Into<Str>,
 
     #[cfg(not(feature = "sync"))] func: impl Fn(T) -> R + 'static,
     #[cfg(feature = "sync")] func: impl Fn(T) -> R + Send + Sync + 'static,
@@ -162,12 +164,13 @@ pub fn reg_unary<T: Variant + Clone, R>(
         + Sync
         + 'static,
 ) {
+    let fn_name = fn_name.into();
     //println!("register {}({})", fn_name, crate::std::any::type_name::<T>());
 
-    let hash = calc_fn_hash(fn_name, [TypeId::of::<T>()].iter().cloned());
+    let hash = calc_fn_hash(&fn_name, [TypeId::of::<T>()].iter().cloned());
 
     let f = Box::new(move |args: &mut FnCallArgs, pos: Position| {
-        check_num_args(fn_name, 1, args, pos)?;
+        check_num_args(&fn_name, 1, args, pos)?;
 
         let mut drain = args.iter_mut();
         let x: &mut T = drain.next().unwrap().downcast_mut().unwrap();
@@ -210,7 +213,7 @@ pub fn reg_unary<T: Variant + Clone, R>(
 /// which takes a first argument of `&mut`, return a `Result<Dynamic, Box<EvalAltResult>>`.
 pub fn reg_unary_mut<T: Variant + Clone, R>(
     lib: &mut PackageStore,
-    fn_name: &'static str,
+    fn_name: impl Into<Str>,
 
     #[cfg(not(feature = "sync"))] func: impl Fn(&mut T) -> R + 'static,
     #[cfg(feature = "sync")] func: impl Fn(&mut T) -> R + Send + Sync + 'static,
@@ -222,12 +225,13 @@ pub fn reg_unary_mut<T: Variant + Clone, R>(
         + Sync
         + 'static,
 ) {
+    let fn_name = fn_name.into();
     //println!("register {}(&mut {})", fn_name, crate::std::any::type_name::<T>());
 
-    let hash = calc_fn_hash(fn_name, [TypeId::of::<T>()].iter().cloned());
+    let hash = calc_fn_hash(&fn_name, [TypeId::of::<T>()].iter().cloned());
 
     let f = Box::new(move |args: &mut FnCallArgs, pos: Position| {
-        check_num_args(fn_name, 1, args, pos)?;
+        check_num_args(&fn_name, 1, args, pos)?;
 
         let mut drain = args.iter_mut();
         let x: &mut T = drain.next().unwrap().downcast_mut().unwrap();
@@ -263,7 +267,7 @@ pub fn reg_unary_mut<T: Variant + Clone, R>(
 /// The above defines a package named 'MyPackage' with a single function named 'my_add'.
 pub fn reg_binary<A: Variant + Clone, B: Variant + Clone, R>(
     lib: &mut PackageStore,
-    fn_name: &'static str,
+    fn_name: impl Into<Str>,
 
     #[cfg(not(feature = "sync"))] func: impl Fn(A, B) -> R + 'static,
     #[cfg(feature = "sync")] func: impl Fn(A, B) -> R + Send + Sync + 'static,
@@ -275,15 +279,16 @@ pub fn reg_binary<A: Variant + Clone, B: Variant + Clone, R>(
         + Sync
         + 'static,
 ) {
+    let fn_name = fn_name.into();
     //println!("register {}({}, {})", fn_name, crate::std::any::type_name::<A>(), crate::std::any::type_name::<B>());
 
     let hash = calc_fn_hash(
-        fn_name,
+        &fn_name,
         [TypeId::of::<A>(), TypeId::of::<B>()].iter().cloned(),
     );
 
     let f = Box::new(move |args: &mut FnCallArgs, pos: Position| {
-        check_num_args(fn_name, 2, args, pos)?;
+        check_num_args(&fn_name, 2, args, pos)?;
 
         let mut drain = args.iter_mut();
         let x: &mut A = drain.next().unwrap().downcast_mut().unwrap();
@@ -327,7 +332,7 @@ pub fn reg_binary<A: Variant + Clone, B: Variant + Clone, R>(
 /// which takes a first argument of `&mut`, return a `Result<Dynamic, Box<EvalAltResult>>`.
 pub fn reg_binary_mut<A: Variant + Clone, B: Variant + Clone, R>(
     lib: &mut PackageStore,
-    fn_name: &'static str,
+    fn_name: impl Into<Str>,
 
     #[cfg(not(feature = "sync"))] func: impl Fn(&mut A, B) -> R + 'static,
     #[cfg(feature = "sync")] func: impl Fn(&mut A, B) -> R + Send + Sync + 'static,
@@ -339,15 +344,16 @@ pub fn reg_binary_mut<A: Variant + Clone, B: Variant + Clone, R>(
         + Sync
         + 'static,
 ) {
+    let fn_name = fn_name.into();
     //println!("register {}(&mut {}, {})", fn_name, crate::std::any::type_name::<A>(), crate::std::any::type_name::<B>());
 
     let hash = calc_fn_hash(
-        fn_name,
+        &fn_name,
         [TypeId::of::<A>(), TypeId::of::<B>()].iter().cloned(),
     );
 
     let f = Box::new(move |args: &mut FnCallArgs, pos: Position| {
-        check_num_args(fn_name, 2, args, pos)?;
+        check_num_args(&fn_name, 2, args, pos)?;
 
         let mut drain = args.iter_mut();
         let x: &mut A = drain.next().unwrap().downcast_mut().unwrap();
@@ -365,7 +371,7 @@ pub fn reg_binary_mut<A: Variant + Clone, B: Variant + Clone, R>(
 /// `map_result` is a function that maps the return type of the function to `Result<Dynamic, EvalAltResult>`.
 pub fn reg_trinary<A: Variant + Clone, B: Variant + Clone, C: Variant + Clone, R>(
     lib: &mut PackageStore,
-    fn_name: &'static str,
+    fn_name: impl Into<Str>,
 
     #[cfg(not(feature = "sync"))] func: impl Fn(A, B, C) -> R + 'static,
     #[cfg(feature = "sync")] func: impl Fn(A, B, C) -> R + Send + Sync + 'static,
@@ -377,17 +383,18 @@ pub fn reg_trinary<A: Variant + Clone, B: Variant + Clone, C: Variant + Clone, R
         + Sync
         + 'static,
 ) {
+    let fn_name = fn_name.into();
     //println!("register {}({}, {}, {})", fn_name, crate::std::any::type_name::<A>(), crate::std::any::type_name::<B>(), crate::std::any::type_name::<C>());
 
     let hash = calc_fn_hash(
-        fn_name,
+        &fn_name,
         [TypeId::of::<A>(), TypeId::of::<B>(), TypeId::of::<C>()]
             .iter()
             .cloned(),
     );
 
     let f = Box::new(move |args: &mut FnCallArgs, pos: Position| {
-        check_num_args(fn_name, 3, args, pos)?;
+        check_num_args(&fn_name, 3, args, pos)?;
 
         let mut drain = args.iter_mut();
         let x: &mut A = drain.next().unwrap().downcast_mut().unwrap();
@@ -406,7 +413,7 @@ pub fn reg_trinary<A: Variant + Clone, B: Variant + Clone, C: Variant + Clone, R
 /// `map_result` is a function that maps the return type of the function to `Result<Dynamic, EvalAltResult>`.
 pub fn reg_trinary_mut<A: Variant + Clone, B: Variant + Clone, C: Variant + Clone, R>(
     lib: &mut PackageStore,
-    fn_name: &'static str,
+    fn_name: impl Into<Str>,
 
     #[cfg(not(feature = "sync"))] func: impl Fn(&mut A, B, C) -> R + 'static,
     #[cfg(feature = "sync")] func: impl Fn(&mut A, B, C) -> R + Send + Sync + 'static,
@@ -418,17 +425,18 @@ pub fn reg_trinary_mut<A: Variant + Clone, B: Variant + Clone, C: Variant + Clon
         + Sync
         + 'static,
 ) {
+    let fn_name = fn_name.into();
     //println!("register {}(&mut {}, {}, {})", fn_name, crate::std::any::type_name::<A>(), crate::std::any::type_name::<B>(), crate::std::any::type_name::<C>());
 
     let hash = calc_fn_hash(
-        fn_name,
+        &fn_name,
         [TypeId::of::<A>(), TypeId::of::<B>(), TypeId::of::<C>()]
             .iter()
             .cloned(),
     );
 
     let f = Box::new(move |args: &mut FnCallArgs, pos: Position| {
-        check_num_args(fn_name, 3, args, pos)?;
+        check_num_args(&fn_name, 3, args, pos)?;
 
         let mut drain = args.iter_mut();
         let x: &mut A = drain.next().unwrap().downcast_mut().unwrap();

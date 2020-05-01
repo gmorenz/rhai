@@ -1,6 +1,7 @@
 //! Module that defines the `Scope` type representing a function call-stack scope.
 
 use crate::any::{Dynamic, Variant};
+use crate::intern::Str;
 use crate::parser::{map_dynamic_to_expr, Expr};
 use crate::token::Position;
 
@@ -17,9 +18,9 @@ pub enum EntryType {
 
 /// An entry in the Scope.
 #[derive(Debug)]
-pub struct Entry<'a> {
+pub struct Entry {
     /// Name of the entry.
-    pub name: Cow<'a, str>,
+    pub name: Str,
     /// Type of the entry.
     pub typ: EntryType,
     /// Current value of the entry.
@@ -57,9 +58,9 @@ pub struct Entry<'a> {
 ///
 /// Currently, `Scope` is neither `Send` nor `Sync`. Turn on the `sync` feature to make it `Send + Sync`.
 #[derive(Debug)]
-pub struct Scope<'a>(Vec<Entry<'a>>);
+pub struct Scope(Vec<Entry>);
 
-impl<'a> Scope<'a> {
+impl Scope {
     /// Create a new Scope.
     ///
     /// # Examples
@@ -145,7 +146,7 @@ impl<'a> Scope<'a> {
     /// my_scope.push("x", 42_i64);
     /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
     /// ```
-    pub fn push<K: Into<Cow<'a, str>>, T: Variant + Clone>(&mut self, name: K, value: T) {
+    pub fn push<T: Variant + Clone>(&mut self, name: Str, value: T) {
         self.push_dynamic_value(name, EntryType::Normal, Dynamic::from(value), false);
     }
 
@@ -161,7 +162,7 @@ impl<'a> Scope<'a> {
     /// my_scope.push_dynamic("x", Dynamic::from(42_i64));
     /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
     /// ```
-    pub fn push_dynamic<K: Into<Cow<'a, str>>>(&mut self, name: K, value: Dynamic) {
+    pub fn push_dynamic<K: Into<Str>>(&mut self, name: K, value: Dynamic) {
         self.push_dynamic_value(name, EntryType::Normal, value, false);
     }
 
@@ -183,7 +184,7 @@ impl<'a> Scope<'a> {
     /// my_scope.push_constant("x", 42_i64);
     /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
     /// ```
-    pub fn push_constant<K: Into<Cow<'a, str>>, T: Variant + Clone>(&mut self, name: K, value: T) {
+    pub fn push_constant<K: Into<Str>, T: Variant + Clone>(&mut self, name: K, value: T) {
         self.push_dynamic_value(name, EntryType::Constant, Dynamic::from(value), true);
     }
 
@@ -206,12 +207,12 @@ impl<'a> Scope<'a> {
     /// my_scope.push_constant_dynamic("x", Dynamic::from(42_i64));
     /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
     /// ```
-    pub fn push_constant_dynamic<K: Into<Cow<'a, str>>>(&mut self, name: K, value: Dynamic) {
+    pub fn push_constant_dynamic<K: Into<Str>>(&mut self, name: K, value: Dynamic) {
         self.push_dynamic_value(name, EntryType::Constant, value, true);
     }
 
     /// Add (push) a new entry with a `Dynamic` value to the Scope.
-    pub(crate) fn push_dynamic_value<K: Into<Cow<'a, str>>>(
+    pub(crate) fn push_dynamic_value<K: Into<Str>>(
         &mut self,
         name: K,
         entry_type: EntryType,
@@ -275,7 +276,7 @@ impl<'a> Scope<'a> {
     /// assert!(my_scope.contains("x"));
     /// assert!(!my_scope.contains("y"));
     /// ```
-    pub fn contains(&self, name: &str) -> bool {
+    pub fn contains(&self, name: &Str) -> bool {
         self.0
             .iter()
             .rev() // Always search a Scope in reverse order
@@ -283,7 +284,7 @@ impl<'a> Scope<'a> {
     }
 
     /// Find an entry in the Scope, starting from the last.
-    pub(crate) fn get(&self, name: &str) -> Option<(usize, EntryType)> {
+    pub(crate) fn get(&self, name: &Str) -> Option<(usize, EntryType)> {
         self.0
             .iter()
             .enumerate()
@@ -309,7 +310,7 @@ impl<'a> Scope<'a> {
     /// my_scope.push("x", 42_i64);
     /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
     /// ```
-    pub fn get_value<T: Variant + Clone>(&self, name: &str) -> Option<T> {
+    pub fn get_value<T: Variant + Clone>(&self, name: &Str) -> Option<T> {
         self.0
             .iter()
             .rev()
@@ -338,13 +339,13 @@ impl<'a> Scope<'a> {
     /// my_scope.set_value("x", 0_i64);
     /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 0);
     /// ```
-    pub fn set_value<T: Variant + Clone>(&mut self, name: &'a str, value: T) {
+    pub fn set_value<T: Variant + Clone>(&mut self, name: &Str, value: T) {
         match self.get(name) {
             Some((_, EntryType::Constant)) => panic!("variable {} is constant", name),
             Some((index, EntryType::Normal)) => {
                 self.0.get_mut(index).unwrap().value = Dynamic::from(value)
             }
-            None => self.push(name, value),
+            None => self.push(name.clone(), value),
         }
     }
 
@@ -367,13 +368,13 @@ impl<'a> Scope<'a> {
     }
 }
 
-impl Default for Scope<'_> {
+impl Default for Scope {
     fn default() -> Self {
         Scope::new()
     }
 }
 
-impl<'a, K: Into<Cow<'a, str>>> iter::Extend<(K, EntryType, Dynamic)> for Scope<'a> {
+impl<K: Into<Str>> iter::Extend<(K, EntryType, Dynamic)> for Scope {
     fn extend<T: IntoIterator<Item = (K, EntryType, Dynamic)>>(&mut self, iter: T) {
         self.0
             .extend(iter.into_iter().map(|(name, typ, value)| Entry {

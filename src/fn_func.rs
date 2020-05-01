@@ -97,14 +97,14 @@ macro_rules! def_anonymous_fn {
             type Output = Box<dyn Fn($($par),*) -> Result<RET, Box<EvalAltResult>>>;
 
             fn create_from_ast(self, ast: AST, entry_point: &str) -> Self::Output {
-                let name = entry_point.to_string();
+                let name = entry_point.into();
 
                 Box::new(move |$($par: $par),*| {
                     self.call_fn(&mut Scope::new(), &ast, &name, ($($par,)*))
                 })
             }
 
-            fn create_from_script(self, script: &str, entry_point: &str) -> Result<Self::Output, Box<ParseError>> {
+            fn create_from_script(self, script: &str, entry_point: &str) -> Result<Self::Output, Box<ParseError>> {                
                 let ast = self.compile(script)?;
                 Ok(Func::<($($par,)*), RET>::create_from_ast(self, ast, entry_point))
             }

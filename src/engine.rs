@@ -3,6 +3,7 @@
 use crate::any::{Dynamic, Union};
 use crate::calc_fn_hash;
 use crate::error::ParseErrorType;
+use crate::intern::Str;
 use crate::optimize::OptimizationLevel;
 use crate::packages::{CorePackage, Package, PackageLibrary, StandardPackage};
 use crate::parser::{Expr, FnDef, ReturnType, Stmt};
@@ -67,10 +68,10 @@ const FUNCTIONS_COUNT: usize = 512;
 #[cfg(any(feature = "only_i32", feature = "only_i64"))]
 const FUNCTIONS_COUNT: usize = 256;
 
-pub const KEYWORD_PRINT: &str = "print";
-pub const KEYWORD_DEBUG: &str = "debug";
-pub const KEYWORD_TYPE_OF: &str = "type_of";
-pub const KEYWORD_EVAL: &str = "eval";
+pub const KEYWORD_PRINT: Str = crate::intern::KEYWORD_PRINT;
+pub const KEYWORD_DEBUG: Str = crate::intern::KEYWORD_DEBUG;
+pub const KEYWORD_TYPE_OF: Str = crate::intern::KEYWORD_TYPE_OF;
+pub const KEYWORD_EVAL: Str = crate::intern::KEYWORD_EVAL;
 pub const FUNC_TO_STRING: &str = "to_string";
 pub const FUNC_GETTER: &str = "get$";
 pub const FUNC_SETTER: &str = "set$";
@@ -248,11 +249,11 @@ impl FunctionsLib {
         )
     }
     /// Does a certain function exist in the `FunctionsLib`?
-    pub fn has_function(&self, name: &str, params: usize) -> bool {
+    pub fn has_function(&self, name: &Str, params: usize) -> bool {
         self.contains_key(&calc_fn_def(name, params))
     }
     /// Get a function definition from the `FunctionsLib`.
-    pub fn get_function(&self, name: &str, params: usize) -> Option<&FnDef> {
+    pub fn get_function(&self, name: &Str, params: usize) -> Option<&FnDef> {
         self.get(&calc_fn_def(name, params)).map(|f| f.as_ref())
     }
     /// Merge another `FunctionsLib` into this `FunctionsLib`.
@@ -382,16 +383,17 @@ impl Default for Engine {
 }
 
 /// Make getter function
-pub fn make_getter(id: &str) -> String {
-    format!("{}{}", FUNC_GETTER, id)
+pub fn make_getter(id: impl AsRef<str>) -> Str {
+    format!("{}{}", FUNC_GETTER, id.as_ref()).into()
 }
 
 /// Extract the property name from a getter function name.
-fn extract_prop_from_getter(fn_name: &str) -> Option<&str> {
+fn extract_prop_from_getter(fn_name: &Str) -> Option<&str> {
     #[cfg(not(feature = "no_object"))]
     {
-        if fn_name.starts_with(FUNC_GETTER) {
-            Some(&fn_name[FUNC_GETTER.len()..])
+        let fn_name_str = fn_name.get_str();
+        if fn_name_str.starts_with(FUNC_GETTER) {
+            Some(&fn_name_str[FUNC_GETTER.len()..])
         } else {
             None
         }
@@ -403,16 +405,17 @@ fn extract_prop_from_getter(fn_name: &str) -> Option<&str> {
 }
 
 /// Make setter function
-pub fn make_setter(id: &str) -> String {
-    format!("{}{}", FUNC_SETTER, id)
+pub fn make_setter(id: impl AsRef<str>) -> Str {
+    format!("{}{}", FUNC_SETTER, id.as_ref()).into()
 }
 
 /// Extract the property name from a setter function name.
-fn extract_prop_from_setter(fn_name: &str) -> Option<&str> {
+fn extract_prop_from_setter(fn_name: &Str) -> Option<&str> {
     #[cfg(not(feature = "no_object"))]
     {
-        if fn_name.starts_with(FUNC_SETTER) {
-            Some(&fn_name[FUNC_SETTER.len()..])
+        let fn_name_str = fn_name.get_str();
+        if fn_name_str.starts_with(FUNC_SETTER) {
+            Some(&fn_name_str[FUNC_SETTER.len()..])
         } else {
             None
         }
@@ -427,25 +430,25 @@ fn extract_prop_from_setter(fn_name: &str) -> Option<&str> {
 ///
 /// Parameter types are passed in via `TypeId` values from an iterator
 /// which can come from any source.
-pub fn calc_fn_spec(fn_name: &str, params: impl Iterator<Item = TypeId>) -> u64 {
+pub fn calc_fn_spec(fn_name: &Str, params: impl Iterator<Item = TypeId>) -> u64 {
     #[cfg(feature = "no_std")]
     let mut s: AHasher = Default::default();
     #[cfg(not(feature = "no_std"))]
     let mut s = DefaultHasher::new();
 
-    s.write(fn_name.as_bytes());
+    fn_name.hash(&mut s);
     params.for_each(|t| t.hash(&mut s));
     s.finish()
 }
 
 /// Calculate a `u64` hash key from a function name and number of parameters (without regard to types).
-pub(crate) fn calc_fn_def(fn_name: &str, params: usize) -> u64 {
+pub(crate) fn calc_fn_def(fn_name: &Str, params: usize) -> u64 {
     #[cfg(feature = "no_std")]
     let mut s: AHasher = Default::default();
     #[cfg(not(feature = "no_std"))]
     let mut s = DefaultHasher::new();
 
-    s.write(fn_name.as_bytes());
+    fn_name.hash(&mut s);
     s.write_usize(params);
     s.finish()
 }
@@ -459,12 +462,12 @@ fn default_print(s: &str) {
 /// Search for a variable within the scope, returning its value and index inside the Scope
 fn search_scope<'a>(
     scope: &'a mut Scope,
-    name: &str,
+    name: &Str,
     begin: Position,
 ) -> Result<(&'a mut Dynamic, ScopeEntryType), Box<EvalAltResult>> {
     let (index, _) = scope
         .get(name)
-        .ok_or_else(|| Box::new(EvalAltResult::ErrorVariableNotFound(name.into(), begin)))?;
+        .ok_or_else(|| Box::new(EvalAltResult::ErrorVariableNotFound(name.clone(), begin)))?;
 
     Ok(scope.get_mut(index))
 }
@@ -529,7 +532,7 @@ impl Engine {
         &self,
         scope: Option<&mut Scope>,
         fn_lib: &FunctionsLib,
-        fn_name: &str,
+        fn_name: &Str,
         args: &mut FnCallArgs,
         def_val: Option<&Dynamic>,
         pos: Position,
@@ -559,14 +562,14 @@ impl Engine {
 
             // See if the function match print/debug (which requires special processing)
             return Ok(match fn_name {
-                KEYWORD_PRINT => (self.print)(result.as_str().map_err(|type_name| {
+                &KEYWORD_PRINT => (self.print)(result.as_str().map_err(|type_name| {
                     Box::new(EvalAltResult::ErrorMismatchOutputType(
                         type_name.into(),
                         pos,
                     ))
                 })?)
                 .into(),
-                KEYWORD_DEBUG => (self.debug)(result.as_str().map_err(|type_name| {
+                &KEYWORD_DEBUG => (self.debug)(result.as_str().map_err(|type_name| {
                     Box::new(EvalAltResult::ErrorMismatchOutputType(
                         type_name.into(),
                         pos,
@@ -605,7 +608,7 @@ impl Engine {
             .collect();
 
         Err(Box::new(EvalAltResult::ErrorFunctionNotFound(
-            format!("{} ({})", fn_name, types_list.join(", ")),
+            format!("{} ({})", fn_name, types_list.join(", ")).into(),
             pos,
         )))
     }
@@ -660,7 +663,7 @@ impl Engine {
                         .params
                         .iter()
                         .zip(args.into_iter().map(|v| v.clone()))
-                        .map(|(name, value)| (name, ScopeEntryType::Normal, value)),
+                        .map(|(name, value)| (name.clone(), ScopeEntryType::Normal, value)),
                 );
 
                 // Evaluate the function at one higher level of call depth
@@ -676,7 +679,7 @@ impl Engine {
     }
 
     // Has a system function an override?
-    fn has_override(&self, fn_lib: &FunctionsLib, name: &str) -> bool {
+    fn has_override(&self, fn_lib: &FunctionsLib, name: &Str) -> bool {
         let hash = calc_fn_hash(name, once(TypeId::of::<String>()));
 
         // First check registered functions
@@ -691,7 +694,7 @@ impl Engine {
     fn exec_fn_call(
         &self,
         fn_lib: &FunctionsLib,
-        fn_name: &str,
+        fn_name: &Str,
         args: &mut [&mut Dynamic],
         def_val: Option<&Dynamic>,
         pos: Position,
@@ -699,12 +702,12 @@ impl Engine {
     ) -> Result<Dynamic, Box<EvalAltResult>> {
         match fn_name {
             // type_of
-            KEYWORD_TYPE_OF if args.len() == 1 && !self.has_override(fn_lib, KEYWORD_TYPE_OF) => {
+            &KEYWORD_TYPE_OF if args.len() == 1 && !self.has_override(fn_lib, &KEYWORD_TYPE_OF) => {
                 Ok(self.map_type_name(args[0].type_name()).to_string().into())
             }
 
             // eval - reaching this point it must be a method-style call
-            KEYWORD_EVAL if args.len() == 1 && !self.has_override(fn_lib, KEYWORD_EVAL) => {
+            &KEYWORD_EVAL if args.len() == 1 && !self.has_override(fn_lib, &KEYWORD_EVAL) => {
                 Err(Box::new(EvalAltResult::ErrorRuntime(
                     "'eval' should not be called in method style. Try eval(...);".into(),
                     pos,
@@ -1101,7 +1104,7 @@ impl Engine {
                     let def_value = Some(&def_value);
 
                     if self
-                        .call_fn_raw(None, fn_lib, "==", args, def_value, rhs.position(), level)?
+                        .call_fn_raw(None, fn_lib, &"==".into(), args, def_value, rhs.position(), level)?
                         .as_bool()
                         .unwrap_or(false)
                     {
@@ -1160,7 +1163,7 @@ impl Engine {
                     Expr::Variable(name, _, pos) => match scope.get(name) {
                         None => {
                             return Err(Box::new(EvalAltResult::ErrorVariableNotFound(
-                                name.to_string(),
+                                name.clone(),
                                 *pos,
                             )))
                         }
@@ -1228,7 +1231,7 @@ impl Engine {
                     .into_iter()
                     .map(|(key, expr, _)| {
                         self.eval_expr(scope, state, fn_lib, &expr, level)
-                            .map(|val| (key.clone(), val))
+                            .map(|val| (key.to_string(), val))
                     })
                     .collect::<Result<HashMap<_, _>, _>>()?,
             )))),
@@ -1242,9 +1245,9 @@ impl Engine {
                 let mut args: Vec<_> = arg_values.iter_mut().collect();
 
                 // eval - only in function call style
-                if fn_name.as_ref() == KEYWORD_EVAL
+                if fn_name == &KEYWORD_EVAL
                     && args.len() == 1
-                    && !self.has_override(fn_lib, KEYWORD_EVAL)
+                    && !self.has_override(fn_lib, &KEYWORD_EVAL)
                 {
                     let prev_len = scope.len();
 
@@ -1409,8 +1412,7 @@ impl Engine {
                         .and_then(|pkg| pkg.type_iterators.get(&tid))
                 }) {
                     // Add the loop variable
-                    let var_name = name.as_ref().clone();
-                    scope.push(var_name, ());
+                    scope.push(name.clone(), ());
                     let index = scope.len() - 1;
 
                     for a in iter_fn(arr) {
@@ -1473,9 +1475,7 @@ impl Engine {
             }
 
             Stmt::Let(name, None, _) => {
-                // TODO - avoid copying variable name in inner block?
-                let var_name = name.as_ref().clone();
-                scope.push(var_name, ());
+                scope.push(name.clone(), ());
                 Ok(Default::default())
             }
 

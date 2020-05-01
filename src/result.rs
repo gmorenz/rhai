@@ -2,6 +2,7 @@
 
 use crate::any::Dynamic;
 use crate::error::ParseError;
+use crate::intern::Str;
 use crate::parser::INT;
 use crate::token::Position;
 
@@ -32,7 +33,7 @@ pub enum EvalAltResult {
     ErrorReadingScriptFile(PathBuf, std::io::Error),
 
     /// Call to an unknown function. Wrapped value is the name of the function.
-    ErrorFunctionNotFound(String, Position),
+    ErrorFunctionNotFound(Str, Position),
     /// Function call has incorrect number of arguments.
     /// Wrapped values are the name of the function, the number of parameters required
     /// and the actual number of arguments passed.
@@ -60,7 +61,7 @@ pub enum EvalAltResult {
     /// The `for` statement encounters a type that is not an iterator.
     ErrorFor(Position),
     /// Usage of an unknown variable. Wrapped value is the name of the variable.
-    ErrorVariableNotFound(String, Position),
+    ErrorVariableNotFound(Str, Position),
     /// Assignment to an inappropriate LHS (left-hand-side) expression.
     ErrorAssignmentToUnknownLHS(Position),
     /// Assignment to a constant variable.

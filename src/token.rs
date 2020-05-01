@@ -1,6 +1,24 @@
 //! Main module defining the lexer and parser.
 
 use crate::error::LexError;
+use crate::intern::{
+    Str,
+    KEYWORD_TRUE,
+    KEYWORD_FALSE,
+    KEYWORD_LET,
+    KEYWORD_CONST,
+    KEYWORD_IF,
+    KEYWORD_ELSE,
+    KEYWORD_WHILE,
+    KEYWORD_LOOP,
+    KEYWORD_CONTINUE,
+    KEYWORD_BREAK,
+    KEYWORD_RETURN,
+    KEYWORD_THROW,
+    KEYWORD_FOR,
+    KEYWORD_IN,
+    KEYWORD_FN,
+};
 use crate::parser::INT;
 
 #[cfg(not(feature = "no_float"))]
@@ -132,9 +150,9 @@ pub enum Token {
     IntegerConstant(INT),
     #[cfg(not(feature = "no_float"))]
     FloatConstant(FLOAT),
-    Identifier(String),
+    Identifier(Str),
     CharConstant(char),
-    StringConst(String),
+    StringConst(Str),
     LeftBrace,
     RightBrace,
     LeftParen,
@@ -210,7 +228,7 @@ impl Token {
             IntegerConstant(i) => i.to_string().into(),
             #[cfg(not(feature = "no_float"))]
             FloatConstant(f) => f.to_string().into(),
-            Identifier(s) => s.into(),
+            Identifier(s) => s.get_str().into(),
             CharConstant(c) => c.to_string().into(),
             LexError(err) => err.to_string().into(),
 
@@ -473,7 +491,7 @@ impl<'a> TokenIterator<'a> {
     pub fn parse_string_literal(
         &mut self,
         enclosing_char: char,
-    ) -> Result<String, (LexError, Position)> {
+    ) -> Result<Str, (LexError, Position)> {
         let mut result = Vec::new();
         let mut escape = String::with_capacity(12);
 
@@ -571,7 +589,7 @@ impl<'a> TokenIterator<'a> {
             }
         }
 
-        Ok(result.iter().collect())
+        Ok(result.iter().collect::<String>().into())
     }
 
     /// Get the next token.
@@ -715,34 +733,35 @@ impl<'a> TokenIterator<'a> {
                         .map(char::is_ascii_alphabetic) // is a letter
                         .unwrap_or(false); // if no alpha-numeric at all - syntax error
 
-                    let identifier: String = result.iter().collect();
+                    let identifier_string: String = result.iter().collect();
 
                     if !is_valid_identifier {
                         return Some((
-                            Token::LexError(Box::new(LERR::MalformedIdentifier(identifier))),
+                            Token::LexError(Box::new(LERR::MalformedIdentifier(identifier_string))),
                             pos,
                         ));
                     }
+                    let identifier: Str = identifier_string.into();
 
                     return Some((
-                        match identifier.as_str() {
-                            "true" => Token::True,
-                            "false" => Token::False,
-                            "let" => Token::Let,
-                            "const" => Token::Const,
-                            "if" => Token::If,
-                            "else" => Token::Else,
-                            "while" => Token::While,
-                            "loop" => Token::Loop,
-                            "continue" => Token::Continue,
-                            "break" => Token::Break,
-                            "return" => Token::Return,
-                            "throw" => Token::Throw,
-                            "for" => Token::For,
-                            "in" => Token::In,
+                        match identifier {
+                            KEYWORD_TRUE => Token::True,
+                            KEYWORD_FALSE => Token::False,
+                            KEYWORD_LET => Token::Let,
+                            KEYWORD_CONST => Token::Const,
+                            KEYWORD_IF => Token::If,
+                            KEYWORD_ELSE => Token::Else,
+                            KEYWORD_WHILE => Token::While,
+                            KEYWORD_LOOP => Token::Loop,
+                            KEYWORD_CONTINUE => Token::Continue,
+                            KEYWORD_BREAK => Token::Break,
+                            KEYWORD_RETURN => Token::Return,
+                            KEYWORD_THROW => Token::Throw,
+                            KEYWORD_FOR => Token::For,
+                            KEYWORD_IN => Token::In,
 
                             #[cfg(not(feature = "no_function"))]
-                            "fn" => Token::Fn,
+                            KEYWORD_FN => Token::Fn,
 
                             _ => Token::Identifier(identifier),
                         },
@@ -769,11 +788,12 @@ impl<'a> TokenIterator<'a> {
                     return Some(self.parse_string_literal('\'').map_or_else(
                         |err| (Token::LexError(Box::new(err.0)), err.1),
                         |result| {
+                            let result = result.get_str();
                             let mut chars = result.chars();
                             let first = chars.next();
 
                             if chars.next().is_some() {
-                                (Token::LexError(Box::new(LERR::MalformedChar(result))), pos)
+                                (Token::LexError(Box::new(LERR::MalformedChar(result.to_owned()))), pos)
                             } else {
                                 (Token::CharConstant(first.expect("should be Some")), pos)
                             }

@@ -18,6 +18,7 @@ categories = [ "no-std", "embedded", "parser-implementations" ]
 
 [dependencies]
 num-traits = { version = "0.2.11", default-features = false }
+lazy_static = "1.4.0"
 
 [features]
 #default = ["no_stdlib", "no_function", "no_index", "no_object", "no_float", "only_i32", "unchecked", "no_optimize", "sync"]

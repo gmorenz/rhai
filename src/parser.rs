@@ -3,6 +3,7 @@
 use crate::any::{Dynamic, Union};
 use crate::engine::{calc_fn_def, Engine, FunctionsLib};
 use crate::error::{LexError, ParseError, ParseErrorType};
+use crate::intern::Str;
 use crate::optimize::{optimize_into_ast, OptimizationLevel};
 use crate::scope::{EntryType as ScopeEntryType, Scope};
 use crate::token::{Position, Token, TokenIterator};
@@ -166,9 +167,9 @@ impl Add<Self> for &AST {
 #[derive(Debug, Clone)]
 pub struct FnDef {
     /// Function name.
-    pub name: String,
+    pub name: Str,
     /// Names of function parameters.
-    pub params: Vec<String>,
+    pub params: Vec<Str>,
     /// Function body.
     pub body: Box<Stmt>,
     /// Position of the function definition.
@@ -186,7 +187,7 @@ pub enum ReturnType {
 
 /// A type that encapsulates a local stack with variable names to simulate an actual runtime scope.
 #[derive(Debug, Clone)]
-struct Stack(Vec<String>);
+struct Stack(Vec<Str>);
 
 impl Stack {
     /// Create a new `Stack`.
@@ -198,7 +199,7 @@ impl Stack {
         self.0.len()
     }
     /// Push (add) a new variable onto the `Stack`.
-    pub fn push(&mut self, name: String) {
+    pub fn push(&mut self, name: Str) {
         self.0.push(name);
     }
     /// Rewind the stack to a previous size.
@@ -209,7 +210,7 @@ impl Stack {
     /// The return value is the offset to be deducted from `Stack::len`,
     /// i.e. the top element of the `Stack` is offset 1.
     /// Return zero when the variable name is not found in the `Stack`.
-    pub fn find(&self, name: &str) -> Option<NonZeroUsize> {
+    pub fn find(&self, name: &Str) -> Option<NonZeroUsize> {
         self.0
             .iter()
             .rev()
@@ -231,11 +232,11 @@ pub enum Stmt {
     /// loop { stmt }
     Loop(Box<Stmt>),
     /// for id in expr { stmt }
-    For(Box<String>, Box<Expr>, Box<Stmt>),
+    For(Str, Box<Expr>, Box<Stmt>),
     /// let id = expr
-    Let(Box<String>, Option<Box<Expr>>, Position),
+    Let(Str, Option<Box<Expr>>, Position),
     /// const id = expr
-    Const(Box<String>, Box<Expr>, Position),
+    Const(Str, Box<Expr>, Position),
     /// { stmt; ... }
     Block(Vec<Stmt>, Position),
     /// { stmt }
@@ -315,18 +316,18 @@ pub enum Expr {
     /// Character constant.
     CharConstant(char, Position),
     /// String constant.
-    StringConstant(String, Position),
+    StringConstant(Str, Position),
     /// Variable access.
-    Variable(Box<String>, Option<NonZeroUsize>, Position),
+    Variable(Str, Option<NonZeroUsize>, Position),
     /// Property access.
-    Property(String, Position),
+    Property(Str, Position),
     /// { stmt }
     Stmt(Box<Stmt>, Position),
     /// func(expr, ... )
     /// Use `Cow<'static, str>` because a lot of operators (e.g. `==`, `>=`) are implemented as function calls
     /// and the function names are predictable, so no need to allocate a new `String`.
     FnCall(
-        Box<Cow<'static, str>>,
+        Str,
         Box<Vec<Expr>>,
         Option<Box<Dynamic>>,
         Position,
@@ -340,7 +341,7 @@ pub enum Expr {
     /// [ expr, ... ]
     Array(Vec<Expr>, Position),
     /// #{ name:expr, ... }
-    Map(Vec<(String, Expr, Position)>, Position),
+    Map(Vec<(Str, Expr, Position)>, Position),
     /// lhs in rhs
     In(Box<Expr>, Box<Expr>, Position),
     /// lhs && rhs
@@ -367,7 +368,7 @@ impl Expr {
             #[cfg(not(feature = "no_float"))]
             Self::FloatConstant(f, _) => (*f).into(),
             Self::CharConstant(c, _) => (*c).into(),
-            Self::StringConstant(s, _) => s.clone().into(),
+            Self::StringConstant(s, _) => s.into(),
             Self::True(_) => true.into(),
             Self::False(_) => false.into(),
             Self::Unit(_) => ().into(),
@@ -385,7 +386,7 @@ impl Expr {
                 Dynamic(Union::Map(Box::new(
                     items
                         .iter()
-                        .map(|(k, v, _)| (k.clone(), v.get_constant_value()))
+                        .map(|(k, v, _)| (k.get_string(), v.get_constant_value()))
                         .collect::<HashMap<_, _>>(),
                 )))
             }
@@ -550,7 +551,7 @@ impl Expr {
     /// Convert a `Variable` into a `Property`.  All other variants are untouched.
     pub(crate) fn into_property(self) -> Self {
         match self {
-            Self::Variable(id, _, pos) => Self::Property(*id, pos),
+            Self::Variable(id, _, pos) => Self::Property(id, pos),
             _ => self,
         }
     }
@@ -613,7 +614,7 @@ fn parse_paren_expr<'a>(
 fn parse_call_expr<'a>(
     input: &mut Peekable<TokenIterator<'a>>,
     stack: &mut Stack,
-    id: String,
+    id: Str,
     begin: Position,
     allow_stmt_expr: bool,
 ) -> Result<Expr, Box<ParseError>> {
@@ -634,7 +635,7 @@ fn parse_call_expr<'a>(
         (Token::RightParen, _) => {
             eat_token(input, Token::RightParen);
             return Ok(Expr::FnCall(
-                Box::new(id.into()),
+                id,
                 Box::new(args),
                 None,
                 begin,
@@ -651,7 +652,7 @@ fn parse_call_expr<'a>(
             (Token::RightParen, _) => {
                 eat_token(input, Token::RightParen);
                 return Ok(Expr::FnCall(
-                    Box::new(id.into()),
+                    id,
                     Box::new(args),
                     None,
                     begin,
@@ -978,7 +979,7 @@ fn parse_primary<'a>(
         Token::StringConst(s) => Expr::StringConstant(s, pos),
         Token::Identifier(s) => {
             let index = stack.find(&s);
-            Expr::Variable(Box::new(s), index, pos)
+            Expr::Variable(s, index, pos)
         }
         Token::LeftParen => parse_paren_expr(input, stack, pos, allow_stmt_expr)?,
         #[cfg(not(feature = "no_index"))]
@@ -1006,7 +1007,7 @@ fn parse_primary<'a>(
         root_expr = match (root_expr, token) {
             // Function call
             (Expr::Variable(id, _, pos), Token::LeftParen) => {
-                parse_call_expr(input, stack, *id, pos, allow_stmt_expr)?
+                parse_call_expr(input, stack, id, pos, allow_stmt_expr)?
             }
             (Expr::Property(id, pos), Token::LeftParen) => {
                 parse_call_expr(input, stack, id, pos, allow_stmt_expr)?
@@ -1068,7 +1069,7 @@ fn parse_unary<'a>(
 
                 // Call negative function
                 e => Ok(Expr::FnCall(
-                    Box::new("-".into()),
+                    "-".into(),
                     Box::new(vec![e]),
                     None,
                     pos,
@@ -1084,7 +1085,7 @@ fn parse_unary<'a>(
         (Token::Bang, _) => {
             let pos = eat_token(input, Token::Bang);
             Ok(Expr::FnCall(
-                Box::new("!".into()),
+                "!".into(),
                 Box::new(vec![parse_primary(input, stack, allow_stmt_expr)?]),
                 Some(Box::new(false.into())), // NOT operator, when operating on invalid operand, defaults to false
                 pos,
@@ -1138,7 +1139,7 @@ fn parse_op_assignment_stmt<'a>(
 
     // lhs op= rhs -> lhs = op(lhs, rhs)
     let args = vec![lhs_copy, rhs];
-    let rhs_expr = Expr::FnCall(Box::new(op.into()), Box::new(args), None, pos);
+    let rhs_expr = Expr::FnCall(op.into(), Box::new(args), None, pos);
     Ok(Expr::Assignment(Box::new(lhs), Box::new(rhs_expr), pos))
 }
 
@@ -1356,50 +1357,50 @@ fn parse_binary_op<'a>(
 
         current_lhs = match op_token {
             Token::Plus => Expr::FnCall(
-                Box::new("+".into()),
+                "+".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
             ),
             Token::Minus => Expr::FnCall(
-                Box::new("-".into()),
+                "-".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
             ),
             Token::Multiply => Expr::FnCall(
-                Box::new("*".into()),
+                "*".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
             ),
             Token::Divide => Expr::FnCall(
-                Box::new("/".into()),
+                "/".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
             ),
 
             Token::LeftShift => Expr::FnCall(
-                Box::new("<<".into()),
+                "<<".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
             ),
             Token::RightShift => Expr::FnCall(
-                Box::new(">>".into()),
+                ">>".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
             ),
             Token::Modulo => Expr::FnCall(
-                Box::new("%".into()),
+                "%".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
             ),
             Token::PowerOf => Expr::FnCall(
-                Box::new("~".into()),
+                "~".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
@@ -1407,37 +1408,37 @@ fn parse_binary_op<'a>(
 
             // Comparison operators default to false when passed invalid operands
             Token::EqualsTo => Expr::FnCall(
-                Box::new("==".into()),
+                "==".into(),
                 Box::new(vec![current_lhs, rhs]),
                 cmp_default,
                 pos,
             ),
             Token::NotEqualsTo => Expr::FnCall(
-                Box::new("!=".into()),
+                "!=".into(),
                 Box::new(vec![current_lhs, rhs]),
                 cmp_default,
                 pos,
             ),
             Token::LessThan => Expr::FnCall(
-                Box::new("<".into()),
+                "<".into(),
                 Box::new(vec![current_lhs, rhs]),
                 cmp_default,
                 pos,
             ),
             Token::LessThanEqualsTo => Expr::FnCall(
-                Box::new("<=".into()),
+                "<=".into(),
                 Box::new(vec![current_lhs, rhs]),
                 cmp_default,
                 pos,
             ),
             Token::GreaterThan => Expr::FnCall(
-                Box::new(">".into()),
+                ">".into(),
                 Box::new(vec![current_lhs, rhs]),
                 cmp_default,
                 pos,
             ),
             Token::GreaterThanEqualsTo => Expr::FnCall(
-                Box::new(">=".into()),
+                ">=".into(),
                 Box::new(vec![current_lhs, rhs]),
                 cmp_default,
                 pos,
@@ -1446,19 +1447,19 @@ fn parse_binary_op<'a>(
             Token::Or => Expr::Or(Box::new(current_lhs), Box::new(rhs), pos),
             Token::And => Expr::And(Box::new(current_lhs), Box::new(rhs), pos),
             Token::Ampersand => Expr::FnCall(
-                Box::new("&".into()),
+                "&".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
             ),
             Token::Pipe => Expr::FnCall(
-                Box::new("|".into()),
+                "|".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
             ),
             Token::XOr => Expr::FnCall(
-                Box::new("^".into()),
+                "^".into(),
                 Box::new(vec![current_lhs, rhs]),
                 None,
                 pos,
@@ -1641,7 +1642,7 @@ fn parse_for<'a>(
 
     stack.rewind(prev_len);
 
-    Ok(Stmt::For(Box::new(name), Box::new(expr), Box::new(body)))
+    Ok(Stmt::For(name, Box::new(expr), Box::new(body)))
 }
 
 /// Parse a variable definition statement.
@@ -1670,12 +1671,12 @@ fn parse_let<'a>(
             // let name = expr
             ScopeEntryType::Normal => {
                 stack.push(name.clone());
-                Ok(Stmt::Let(Box::new(name), Some(Box::new(init_value)), pos))
+                Ok(Stmt::Let(name, Some(Box::new(init_value)), pos))
             }
             // const name = { expr:constant }
             ScopeEntryType::Constant if init_value.is_constant() => {
                 stack.push(name.clone());
-                Ok(Stmt::Const(Box::new(name), Box::new(init_value), pos))
+                Ok(Stmt::Const(name, Box::new(init_value), pos))
             }
             // const name = expr - error
             ScopeEntryType::Constant => {
@@ -1684,7 +1685,7 @@ fn parse_let<'a>(
         }
     } else {
         // let name
-        Ok(Stmt::Let(Box::new(name), None, pos))
+        Ok(Stmt::Let(name, None, pos))
     }
 }
 
@@ -2020,7 +2021,7 @@ pub fn map_dynamic_to_expr(value: Dynamic, pos: Position) -> Option<Expr> {
         Union::Unit(_) => Some(Expr::Unit(pos)),
         Union::Int(value) => Some(Expr::IntegerConstant(value, pos)),
         Union::Char(value) => Some(Expr::CharConstant(value, pos)),
-        Union::Str(value) => Some(Expr::StringConstant((*value).clone(), pos)),
+        Union::Str(value) => Some(Expr::StringConstant((*value).into(), pos)),
         Union::Bool(true) => Some(Expr::True(pos)),
         Union::Bool(false) => Some(Expr::False(pos)),
         #[cfg(not(feature = "no_index"))]
@@ -2049,7 +2050,7 @@ pub fn map_dynamic_to_expr(value: Dynamic, pos: Position) -> Option<Expr> {
                 Some(Expr::Map(
                     items
                         .into_iter()
-                        .map(|(k, expr, pos)| (k, expr.unwrap(), pos))
+                        .map(|(k, expr, pos)| (k.into(), expr.unwrap(), pos))
                         .collect(),
                     pos,
                 ))

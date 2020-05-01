@@ -69,6 +69,8 @@
 #[cfg(feature = "no_std")]
 extern crate alloc;
 
+#[macro_use] extern crate lazy_static;
+
 mod any;
 mod api;
 mod engine;
@@ -76,6 +78,7 @@ mod error;
 mod fn_call;
 mod fn_func;
 mod fn_register;
+mod intern;
 mod optimize;
 pub mod packages;
 mod parser;

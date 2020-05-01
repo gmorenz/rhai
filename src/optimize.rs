@@ -4,6 +4,7 @@ use crate::engine::{
     Engine, FnAny, FnCallArgs, FunctionsLib, KEYWORD_DEBUG, KEYWORD_EVAL, KEYWORD_PRINT,
     KEYWORD_TYPE_OF,
 };
+use crate::intern::Str;
 use crate::packages::PackageLibrary;
 use crate::parser::{map_dynamic_to_expr, Expr, FnDef, ReturnType, Stmt, AST};
 use crate::result::EvalAltResult;
@@ -14,7 +15,7 @@ use crate::stdlib::{
     boxed::Box,
     collections::HashMap,
     rc::Rc,
-    string::{String, ToString},
+    string::ToString,
     sync::Arc,
     vec,
     vec::Vec,
@@ -50,11 +51,11 @@ struct State<'a> {
     /// Has the AST been changed during this pass?
     changed: bool,
     /// Collection of constants to use for eager function evaluations.
-    constants: Vec<(String, Expr)>,
+    constants: Vec<(Str, Expr)>,
     /// An `Engine` instance for eager function evaluation.
     engine: &'a Engine,
     /// Library of script-defined functions.
-    fn_lib: &'a [(&'a str, usize)],
+    fn_lib: &'a [(&'a Str, usize)],
     /// Optimization level.
     optimization_level: OptimizationLevel,
 }
@@ -63,7 +64,7 @@ impl<'a> State<'a> {
     /// Create a new State.
     pub fn new(
         engine: &'a Engine,
-        fn_lib: &'a [(&'a str, usize)],
+        fn_lib: &'a [(&'a Str, usize)],
         level: OptimizationLevel,
     ) -> Self {
         Self {
@@ -87,7 +88,7 @@ impl<'a> State<'a> {
         self.changed
     }
     /// Does a constant exist?
-    pub fn contains_constant(&self, name: &str) -> bool {
+    pub fn contains_constant(&self, name: &Str) -> bool {
         self.constants.iter().any(|(n, _)| n == name)
     }
     /// Prune the list of constants back to a specified size.
@@ -95,11 +96,11 @@ impl<'a> State<'a> {
         self.constants.truncate(len)
     }
     /// Add a new constant to the list.
-    pub fn push_constant(&mut self, name: &str, value: Expr) {
-        self.constants.push((name.to_string(), value))
+    pub fn push_constant(&mut self, name: &Str, value: Expr) {
+        self.constants.push((name.clone(), value))
     }
     /// Look up a constant from the list.
-    pub fn find_constant(&self, name: &str) -> Option<&Expr> {
+    pub fn find_constant(&self, name: &Str) -> Option<&Expr> {
         for (n, expr) in self.constants.iter().rev() {
             if n == name {
                 return Some(expr);
@@ -114,7 +115,7 @@ impl<'a> State<'a> {
 fn call_fn(
     packages: &Vec<PackageLibrary>,
     functions: &HashMap<u64, Box<FnAny>>,
-    fn_name: &str,
+    fn_name: &Str,
     args: &mut FnCallArgs,
     pos: Position,
 ) -> Result<Option<Dynamic>, Box<EvalAltResult>> {
@@ -345,7 +346,7 @@ fn optimize_stmt<'a>(stmt: Stmt, state: &mut State<'a>, preserve_result: bool) -
 /// Optimize an expression.
 fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
     // These keywords are handled specially
-    const DONT_EVAL_KEYWORDS: [&str; 3] = [KEYWORD_PRINT, KEYWORD_DEBUG, KEYWORD_EVAL];
+    const DONT_EVAL_KEYWORDS: [&Str; 3] = [&KEYWORD_PRINT, &KEYWORD_DEBUG, &KEYWORD_EVAL];
 
     match expr {
         // ( stmt )
@@ -436,11 +437,11 @@ fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
             }
             // string[int]
             (Expr::StringConstant(s, pos), Expr::IntegerConstant(i, _))
-                if i >= 0 && (i as usize) < s.chars().count() =>
+                if i >= 0 && (i as usize) < s.get_str().chars().count() =>
             {
                 // String literal indexing - get the character
                 state.set_dirty();
-                Expr::CharConstant(s.chars().nth(i as usize).expect("should get char"), pos)
+                Expr::CharConstant(s.get_str().chars().nth(i as usize).expect("should get char"), pos)
             }
             // lhs[rhs]
             (lhs, rhs) => Expr::Index(
@@ -466,7 +467,7 @@ fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
             // "xxx" in "xxxxx"
             (Expr::StringConstant(lhs, pos), Expr::StringConstant(rhs, _)) => {
                 state.set_dirty();
-                if rhs.contains(&lhs) {
+                if rhs.get_str().contains(lhs.get_str()) {
                     Expr::True(pos)
                 } else {
                     Expr::False(pos)
@@ -475,7 +476,7 @@ fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
             // 'x' in "xxxxx"
             (Expr::CharConstant(lhs, pos), Expr::StringConstant(rhs, _)) => {
                 state.set_dirty();
-                if rhs.contains(&lhs.to_string()) {
+                if rhs.get_str().contains(&lhs.to_string()) {
                     Expr::True(pos)
                 } else {
                     Expr::False(pos)
@@ -493,7 +494,7 @@ fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
             // 'x' in #{...}
             (Expr::CharConstant(lhs, pos), Expr::Map(items, _)) => {
                 state.set_dirty();
-                let lhs = lhs.to_string();
+                let lhs = lhs.into();
 
                 if items.iter().find(|(name, _, _)| name == &lhs).is_some() {
                     Expr::True(pos)
@@ -558,7 +559,7 @@ fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
         },
 
         // Do not call some special keywords
-        Expr::FnCall(id, args, def_value, pos) if DONT_EVAL_KEYWORDS.contains(&id.as_ref().as_ref())=>
+        Expr::FnCall(id, args, def_value, pos) if DONT_EVAL_KEYWORDS.contains(&&id)=>
             Expr::FnCall(id, Box::new(args.into_iter().map(|a| optimize_expr(a, state)).collect()), def_value, pos),
 
         // Eagerly call functions
@@ -567,7 +568,7 @@ fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
                 && args.iter().all(|expr| expr.is_constant()) // all arguments are constants
         => {
             // First search in script-defined functions (can override built-in)
-            if state.fn_lib.iter().find(|(name, len)| name == id.as_ref() && *len == args.len()).is_some() {
+            if state.fn_lib.iter().find(|(name, len)| *name == &id && *len == args.len()).is_some() {
                 // A script-defined function overrides the built-in function - do not make the call
                 return Expr::FnCall(id, Box::new(args.into_iter().map(|a| optimize_expr(a, state)).collect()), def_value, pos);
             }
@@ -577,7 +578,7 @@ fn optimize_expr<'a>(expr: Expr, state: &mut State<'a>) -> Expr {
 
             // Save the typename of the first argument if it is `type_of()`
             // This is to avoid `call_args` being passed into the closure
-            let arg_for_type_of = if *id == KEYWORD_TYPE_OF && call_args.len() == 1 {
+            let arg_for_type_of = if id == KEYWORD_TYPE_OF && call_args.len() == 1 {
                 state.engine.map_type_name(call_args[0].type_name())
             } else {
                 ""
@@ -625,7 +626,7 @@ fn optimize<'a>(
     statements: Vec<Stmt>,
     engine: &Engine,
     scope: &Scope,
-    fn_lib: &'a [(&'a str, usize)],
+    fn_lib: &'a [(&'a Str, usize)],
     level: OptimizationLevel,
 ) -> Vec<Stmt> {
     // If optimization level is None then skip optimizing
@@ -644,9 +645,9 @@ fn optimize<'a>(
             *typ == ScopeEntryType::Constant
                 && expr.as_ref().map(|v| v.is_constant()).unwrap_or(false)
         })
-        .for_each(|ScopeEntry { name, expr, .. }| {
+        .for_each(|ScopeEntry { ref name, expr, .. }| {
             state.push_constant(
-                name.as_ref(),
+                name,
                 (**expr.as_ref().expect("should be Some(expr)")).clone(),
             )
         });
@@ -669,7 +670,7 @@ fn optimize<'a>(
                 match stmt {
                     Stmt::Const(ref name, ref value, _) => {
                         // Load constants
-                        state.push_constant(name.as_ref(), value.as_ref().clone());
+                        state.push_constant(name, value.as_ref().clone());
                         stmt // Keep it in the global scope
                     }
                     _ => {
@@ -716,7 +717,7 @@ pub fn optimize_into_ast(
 
     let fn_lib: Vec<_> = functions
         .iter()
-        .map(|fn_def| (fn_def.name.as_str(), fn_def.params.len()))
+        .map(|fn_def| (&fn_def.name, fn_def.params.len()))
         .collect();
 
     let lib = FunctionsLib::from_vec(

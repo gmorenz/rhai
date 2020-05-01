@@ -1,6 +1,7 @@
 //! Helper module which defines the `Any` trait to to allow dynamic value handling.
 
 use crate::engine::{Array, Map};
+use crate::intern::Str;
 use crate::parser::INT;
 
 #[cfg(not(feature = "no_float"))]
@@ -520,6 +521,12 @@ impl From<String> for Dynamic {
         Self(Union::Str(Box::new(value)))
     }
 }
+impl From<&Str> for Dynamic {
+    fn from(value: &Str) -> Self {
+        Self(Union::Str(Box::new(value.to_string())))
+    }
+}
+
 impl<T: Variant + Clone> From<Vec<T>> for Dynamic {
     fn from(value: Vec<T>) -> Self {
         Self(Union::Array(Box::new(

@@ -1,5 +1,6 @@
 //! Module containing error definitions for the parsing process.
 
+use crate::intern::Str;
 use crate::token::Position;
 
 use crate::stdlib::{boxed::Box, char, error::Error, fmt, string::String};
@@ -69,7 +70,7 @@ pub enum ParseErrorType {
     /// Never appears under the `no_object` feature.
     DuplicatedProperty(String),
     /// Invalid expression assigned to constant. Wrapped value is the name of the constant.
-    ForbiddenConstantExpr(String),
+    ForbiddenConstantExpr(Str),
     /// Missing a property name for custom types and maps.
     ///
     /// Never appears under the `no_object` feature.
@@ -89,7 +90,7 @@ pub enum ParseErrorType {
     /// A function definition is missing the parameters list. Wrapped value is the function name.
     ///
     /// Never appears under the `no_function` feature.
-    FnMissingParams(String),
+    FnMissingParams(Str),
     /// A function definition has duplicated parameters. Wrapped values are the function name and parameter name.
     ///
     /// Never appears under the `no_function` feature.
@@ -97,7 +98,7 @@ pub enum ParseErrorType {
     /// A function definition is missing the body. Wrapped value is the function name.
     ///
     /// Never appears under the `no_function` feature.
-    FnMissingBody(String),
+    FnMissingBody(Str),
     /// Assignment to an inappropriate LHS (left-hand-side) expression.
     AssignmentToInvalidLHS,
     /// Assignment to an a constant variable.

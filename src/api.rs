@@ -3,6 +3,7 @@
 use crate::any::{Dynamic, Variant};
 use crate::engine::{make_getter, make_setter, Engine, Map, State};
 use crate::error::ParseError;
+use crate::intern::Str;
 use crate::fn_call::FuncArgs;
 use crate::fn_register::RegisterFn;
 use crate::optimize::{optimize_into_ast, OptimizationLevel};
@@ -916,7 +917,7 @@ impl Engine {
         &self,
         scope: &mut Scope,
         ast: &AST,
-        name: &str,
+        name: &Str,
         args: A,
     ) -> Result<T, Box<EvalAltResult>> {
         let mut arg_values = args.into_vec();
@@ -926,7 +927,7 @@ impl Engine {
 
         let fn_def = fn_lib
             .get_function(name, args.len())
-            .ok_or_else(|| Box::new(EvalAltResult::ErrorFunctionNotFound(name.to_string(), pos)))?;
+            .ok_or_else(|| Box::new(EvalAltResult::ErrorFunctionNotFound(name.clone(), pos)))?;
 
         let result = self.call_fn_from_lib(Some(scope), fn_lib, fn_def, &mut args, pos, 0)?;
 
