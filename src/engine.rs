@@ -1231,7 +1231,7 @@ impl Engine {
                     .into_iter()
                     .map(|(key, expr, _)| {
                         self.eval_expr(scope, state, fn_lib, &expr, level)
-                            .map(|val| (key.to_string(), val))
+                            .map(|val| (key.get_string(), val))
                     })
                     .collect::<Result<HashMap<_, _>, _>>()?,
             )))),
@@ -1468,9 +1468,7 @@ impl Engine {
             // Let statement
             Stmt::Let(name, Some(expr), _) => {
                 let val = self.eval_expr(scope, state, fn_lib, expr, level)?;
-                // TODO - avoid copying variable name in inner block?
-                let var_name = name.as_ref().clone();
-                scope.push_dynamic_value(var_name, ScopeEntryType::Normal, val, false);
+                scope.push_dynamic_value(name.clone(), ScopeEntryType::Normal, val, false);
                 Ok(Default::default())
             }
 
@@ -1482,9 +1480,7 @@ impl Engine {
             // Const statement
             Stmt::Const(name, expr, _) if expr.is_constant() => {
                 let val = self.eval_expr(scope, state, fn_lib, expr, level)?;
-                // TODO - avoid copying variable name in inner block?
-                let var_name = name.as_ref().clone();
-                scope.push_dynamic_value(var_name, ScopeEntryType::Constant, val, true);
+                scope.push_dynamic_value(name.clone(), ScopeEntryType::Constant, val, true);
                 Ok(Default::default())
             }
 

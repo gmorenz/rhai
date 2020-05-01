@@ -368,7 +368,12 @@ impl Expr {
             #[cfg(not(feature = "no_float"))]
             Self::FloatConstant(f, _) => (*f).into(),
             Self::CharConstant(c, _) => (*c).into(),
-            Self::StringConstant(s, _) => s.into(),
+            Self::StringConstant(s, _) => {
+                // **** TODO **** : Simplify
+                let v: Dynamic = s.into();
+                assert!(v.as_str().is_ok());
+                v
+            },
             Self::True(_) => true.into(),
             Self::False(_) => false.into(),
             Self::Unit(_) => ().into(),
@@ -1738,9 +1743,8 @@ fn parse_block<'a>(
                 return Err(PERR::BadInput(err.to_string()).into_err(*pos))
             }
             // { ... stmt ???
-            (token, pos) => {
+            (_, pos) => {
                 // Semicolons are not optional between statements
-                panic!("parser.rs:1743 Missing toekn, instead {:?}", token);
                 return Err(
                     PERR::MissingToken(";".into(), "to terminate this statement".into())
                         .into_err(*pos),
@@ -1964,6 +1968,7 @@ fn parse_global_level<'a>(
 
         // Actual statement
         let stmt = parse_stmt(input, &mut stack, false, true)?;
+        println!("Stmt: {:?}", stmt);
 
         let need_semicolon = !stmt.is_self_terminated();
 
@@ -1986,6 +1991,7 @@ fn parse_global_level<'a>(
             }
             // stmt ???
             (token, pos) => {
+                // **** TODO ****: Remove before commit
                 return Err(
                     PERR::MissingToken(";".into(), format!("1990 to terminate this statement {:?}", token))
                         .into_err(*pos),

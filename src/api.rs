@@ -3,7 +3,7 @@
 use crate::any::{Dynamic, Variant};
 use crate::engine::{make_getter, make_setter, Engine, Map, State};
 use crate::error::ParseError;
-use crate::intern::Str;
+use crate::intern::{StrLike, Str};
 use crate::fn_call::FuncArgs;
 use crate::fn_register::RegisterFn;
 use crate::optimize::{optimize_into_ast, OptimizationLevel};
@@ -21,6 +21,7 @@ use crate::stdlib::{
 };
 #[cfg(not(feature = "no_std"))]
 use crate::stdlib::{fs::File, io::prelude::*, path::PathBuf};
+use std::borrow::Cow;
 
 // Define callback function types
 #[cfg(feature = "sync")]
@@ -657,7 +658,7 @@ impl Engine {
     /// assert_eq!(engine.eval_with_scope::<i64>(&mut scope, "x = x + 2; x")?, 44);
     ///
     /// // The variable in the scope is modified
-    /// assert_eq!(scope.get_value::<i64>("x").expect("variable x should exist"), 44);
+    /// assert_eq!(scope.get_value::<i64, _>("x").expect("variable x should exist"), 44);
     /// # Ok(())
     /// # }
     /// ```
@@ -770,7 +771,7 @@ impl Engine {
     /// assert_eq!(engine.eval_ast_with_scope::<i64>(&mut scope, &ast)?, 44);
     ///
     /// // The variable in the scope is modified
-    /// assert_eq!(scope.get_value::<i64>("x").expect("variable x should exist"), 44);
+    /// assert_eq!(scope.get_value::<i64, _>("x").expect("variable x should exist"), 44);
     /// # Ok(())
     /// # }
     /// ```
@@ -913,13 +914,15 @@ impl Engine {
     /// # }
     /// ```
     #[cfg(not(feature = "no_function"))]
-    pub fn call_fn<A: FuncArgs, T: Variant + Clone>(
+    pub fn call_fn<N: StrLike, A: FuncArgs, T: Variant + Clone>(
         &self,
         scope: &mut Scope,
         ast: &AST,
-        name: &Str,
+        name: N,
         args: A,
     ) -> Result<T, Box<EvalAltResult>> {
+        let name = name.to_pre_ref();
+        let name = name.as_ref();
         let mut arg_values = args.into_vec();
         let mut args: Vec<_> = arg_values.iter_mut().collect();
         let fn_lib = ast.1.as_ref();

@@ -1,7 +1,7 @@
 //! Module that defines the `Scope` type representing a function call-stack scope.
 
 use crate::any::{Dynamic, Variant};
-use crate::intern::Str;
+use crate::intern::{StrLike, Str};
 use crate::parser::{map_dynamic_to_expr, Expr};
 use crate::token::Position;
 
@@ -47,8 +47,8 @@ pub struct Entry {
 ///
 /// assert_eq!(engine.eval_with_scope::<i64>(&mut my_scope, "x + 1")?, 42);
 ///
-/// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 41);
-/// assert_eq!(my_scope.get_value::<i64>("z").unwrap(), 0);
+/// assert_eq!(my_scope.get_value::<i64, _>("x").unwrap(), 41);
+/// assert_eq!(my_scope.get_value::<i64, _>("z").unwrap(), 0);
 /// # Ok(())
 /// # }
 /// ```
@@ -71,7 +71,7 @@ impl Scope {
     /// let mut my_scope = Scope::new();
     ///
     /// my_scope.push("x", 42_i64);
-    /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
+    /// assert_eq!(my_scope.get_value::<i64, _>("x").unwrap(), 42);
     /// ```
     pub fn new() -> Self {
         Self(Vec::new())
@@ -144,7 +144,7 @@ impl Scope {
     /// let mut my_scope = Scope::new();
     ///
     /// my_scope.push("x", 42_i64);
-    /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
+    /// assert_eq!(my_scope.get_value::<i64, _>("x").unwrap(), 42);
     /// ```
     pub fn push<K: Into<Str>, T: Variant + Clone>(&mut self, name: K, value: T) {
         self.push_dynamic_value(name, EntryType::Normal, Dynamic::from(value), false);
@@ -160,7 +160,7 @@ impl Scope {
     /// let mut my_scope = Scope::new();
     ///
     /// my_scope.push_dynamic("x", Dynamic::from(42_i64));
-    /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
+    /// assert_eq!(my_scope.get_value::<i64, _>("x").unwrap(), 42);
     /// ```
     pub fn push_dynamic<K: Into<Str>>(&mut self, name: K, value: Dynamic) {
         self.push_dynamic_value(name, EntryType::Normal, value, false);
@@ -182,7 +182,7 @@ impl Scope {
     /// let mut my_scope = Scope::new();
     ///
     /// my_scope.push_constant("x", 42_i64);
-    /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
+    /// assert_eq!(my_scope.get_value::<i64, _>("x").unwrap(), 42);
     /// ```
     pub fn push_constant<K: Into<Str>, T: Variant + Clone>(&mut self, name: K, value: T) {
         self.push_dynamic_value(name, EntryType::Constant, Dynamic::from(value), true);
@@ -205,7 +205,7 @@ impl Scope {
     /// let mut my_scope = Scope::new();
     ///
     /// my_scope.push_constant_dynamic("x", Dynamic::from(42_i64));
-    /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
+    /// assert_eq!(my_scope.get_value::<i64, _>("x").unwrap(), 42);
     /// ```
     pub fn push_constant_dynamic<K: Into<Str>>(&mut self, name: K, value: Dynamic) {
         self.push_dynamic_value(name, EntryType::Constant, value, true);
@@ -276,7 +276,9 @@ impl Scope {
     /// assert!(my_scope.contains("x"));
     /// assert!(!my_scope.contains("y"));
     /// ```
-    pub fn contains(&self, name: &Str) -> bool {
+    pub fn contains(&self, name: impl StrLike) -> bool {
+        let name = name.to_pre_ref();
+        let name = name.as_ref();
         self.0
             .iter()
             .rev() // Always search a Scope in reverse order
@@ -308,9 +310,11 @@ impl Scope {
     /// let mut my_scope = Scope::new();
     ///
     /// my_scope.push("x", 42_i64);
-    /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
+    /// assert_eq!(my_scope.get_value::<i64, _>("x").unwrap(), 42);
     /// ```
-    pub fn get_value<T: Variant + Clone>(&self, name: &Str) -> Option<T> {
+    pub fn get_value<'a, T: Variant + Clone, N: StrLike>(&self, name: N) -> Option<T> {
+        let name = name.to_pre_ref();
+        let name = name.as_ref();
         self.0
             .iter()
             .rev()
@@ -334,12 +338,14 @@ impl Scope {
     /// let mut my_scope = Scope::new();
     ///
     /// my_scope.push("x", 42_i64);
-    /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 42);
+    /// assert_eq!(my_scope.get_value::<i64, _>("x").unwrap(), 42);
     ///
     /// my_scope.set_value("x", 0_i64);
-    /// assert_eq!(my_scope.get_value::<i64>("x").unwrap(), 0);
+    /// assert_eq!(my_scope.get_value::<i64, _>("x").unwrap(), 0);
     /// ```
-    pub fn set_value<T: Variant + Clone>(&mut self, name: &Str, value: T) {
+    pub fn set_value<T: Variant + Clone, N: StrLike>(&mut self, name: N, value: T) {
+        let name = name.to_pre_ref();
+        let name = name.as_ref();
         match self.get(name) {
             Some((_, EntryType::Constant)) => panic!("variable {} is constant", name),
             Some((index, EntryType::Normal)) => {

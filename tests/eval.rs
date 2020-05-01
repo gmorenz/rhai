@@ -42,19 +42,19 @@ fn test_eval_function() -> Result<(), Box<EvalAltResult>> {
 
     assert_eq!(
         scope
-            .get_value::<INT>(&"x".into())
+            .get_value::<INT, _>("x")
             .expect("variable x should exist"),
         10
     );
 
     assert_eq!(
         scope
-            .get_value::<INT>(&"y".into())
+            .get_value::<INT, _>("y")
             .expect("variable y should exist"),
         32
     );
 
-    assert!(scope.contains(&"script".into()));
+    assert!(scope.contains("script"));
     assert_eq!(scope.len(), 3);
 
     Ok(())

@@ -4,6 +4,7 @@ use crate::stdlib::{
     num::NonZeroU32,
     sync::RwLock,
 };
+use std::borrow::Cow;
 
 /* A note on potential performance improvements
 
@@ -65,9 +66,9 @@ pub fn intern_string(string: String) -> Str {
     if let Some(&idx) = interner.dedup_map.get(&string) {
         match &mut interner.strings[idx.get() as usize] {
             Entry::Occupied{ref mut refs, ..} => { 
-                println!("{} Reintern {} at {}", idx, string, refs.get());
+                // println!("{} Reintern {} at {}", idx, string, refs.get());
                 *refs = NonZeroU32::new(refs.get() + 1).unwrap();
-                println!("{} Reintern {} to {}", idx, string, refs.get());
+                // println!("{} Reintern {} to {}", idx, string, refs.get());
             }
             Entry::Vacant(..) => unreachable!()
         };
@@ -80,7 +81,7 @@ pub fn intern_string(string: String) -> Str {
     };
 
     if let Some(vacancy) = interner.vacant_head {
-        println!("{} New Vacant {}", vacancy, string);
+        // println!("{} New Vacant {}", vacancy, string);
         interner.dedup_map.insert(string, vacancy);
         let entry = replace(&mut interner.strings[vacancy.get() as usize], entry);
         match entry {
@@ -91,7 +92,7 @@ pub fn intern_string(string: String) -> Str {
     }
     else {
         let next = NonZeroU32::new(interner.strings.len() as u32).unwrap();
-        println!("{} New Tail {}", next, string);
+        // println!("{} New Tail {}", next, string);
         interner.dedup_map.insert(string, next);
         interner.strings.push(entry);
         Str(next)
@@ -137,7 +138,7 @@ impl Clone for Str {
         match &mut interner.strings[self.0.get() as usize] {
             &mut Entry::Occupied{ ref mut refs, ref data } => {
                 *refs = NonZeroU32::new(refs.get() + 1).unwrap();
-                println!("{} Clone {} to {}", self.0, data, refs.get());
+                // println!("{} Clone {} to {}", self.0, data, refs.get());
             }
             _ => unreachable!()
         }
@@ -201,11 +202,11 @@ impl Drop for Str {
                 let v = refs.get();
                 if v > 1 {
                     *refs = NonZeroU32::new(v - 1).unwrap();
-                    println!("{} Decr {} to {}", self.0, data, refs.get());
+                    // println!("{} Decr {} to {}", self.0, data, refs.get());
                     return;
                 }
                 else {
-                    println!("{} Free {}", self.0, data);
+                    // println!("{} Free {}", self.0, data);
                 }
             }
             _ => unreachable!("{} Free Vacant", self.0),
@@ -252,33 +253,96 @@ impl Interner {
     fn new() -> Self {
         // First entry is a dummy entry to allow indexing without offsets
         // Then we have the list of hardcoded keywords
-        let strings = vec![
+        let mut strings = vec![
             Entry::Vacant(None),
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "print".to_owned() },    
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "debug".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "type_of".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "eval".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "true".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "false".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "let".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "const".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "if".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "else".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "while".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "loop".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "continue".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "break".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "return".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "throw".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "for".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "in".to_owned() },
-            Entry::Occupied{ refs: NonZeroU32::new(1).unwrap(), data: "fn".to_owned() },
         ];
+        let mut dedup_map = HashMap::new();
+
+        let one = NonZeroU32::new(1).unwrap();
+        for (i, (keyword, string)) in [
+            (KEYWORD_PRINT, "print"),
+            (KEYWORD_DEBUG, "debug"),
+            (KEYWORD_TYPE_OF, "type_of"),
+            (KEYWORD_EVAL, "eval"),
+            (KEYWORD_TRUE, "true"),
+            (KEYWORD_FALSE, "false"),
+            (KEYWORD_LET, "let"),
+            (KEYWORD_CONST, "const"),
+            (KEYWORD_IF, "if"),
+            (KEYWORD_ELSE, "else"),
+            (KEYWORD_WHILE, "while"),
+            (KEYWORD_LOOP, "loop"),
+            (KEYWORD_CONTINUE, "continue"),
+            (KEYWORD_BREAK, "break"),
+            (KEYWORD_RETURN, "return"),
+            (KEYWORD_THROW, "throw"),
+            (KEYWORD_FOR, "for"),
+            (KEYWORD_IN, "in"),
+            (KEYWORD_FN, "fn"),
+        ].iter().enumerate() {
+            debug_assert_eq!(i as u32 + 1, keyword.0.get());
+            strings.push(Entry::Occupied{ refs: one, data: string.to_string()});
+            dedup_map.insert(string.to_string(), keyword.0);
+        }
+
         Interner {
             next_idx: NonZeroU32::new(strings.len() as u32).unwrap(),
             strings,
             vacant_head: None,
-            dedup_map: HashMap::new(),
+            dedup_map,
         }
     }
+}
+
+// /// Sealed - Cannot be implemented outside this crate
+// pub trait StrLikeRef {
+//     fn to_str_ref(&self) -> &Str;
+// }
+
+// impl StrLikeRef for Str {
+//     fn to_str_ref(&self) -> &Str { self }
+// }
+
+// impl <'a> StrLikeRef for &'a Str {
+//     fn to_str_ref(&self) -> &Str { self }
+// }
+
+impl AsRef<Str> for Str {
+    fn as_ref(&self) -> &Str { self }
+}
+
+/// Sealed - Cannot be implemented outside this crate
+pub trait StrLike {
+    type PreRef: AsRef<Str>;
+    fn to_pre_ref(self) -> Self::PreRef;
+}
+
+impl StrLike for Str {
+    type PreRef = Self;
+    fn to_pre_ref(self) -> Self { self }
+}
+
+impl <'a> StrLike for &'a Str {
+    type PreRef = Self;
+    fn to_pre_ref(self) -> Self { self }
+}
+
+impl <'a> StrLike for &'a str {
+    type PreRef = Str;
+    fn to_pre_ref(self) -> Str { intern_string(self.to_string()) }
+}
+
+fn test() {
+
+}
+
+#[test]
+fn test_interner() {
+    let interned_var: Str = "let".into();
+    assert_eq!(interned_var.0.get(), 7);
+    assert_eq!(interned_var.static_str().0, KEYWORD_LET.0);
+    if interned_var.static_str() != KEYWORD_LET {
+        panic!("Wait, wat");
+    }
+    assert!(matches!(interned_var.static_str(), KEYWORD_LET));
 }
